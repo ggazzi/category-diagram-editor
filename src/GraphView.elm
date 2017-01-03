@@ -9,8 +9,10 @@ module GraphView
         , init
         , Config
         , Event
+        , Target(..)
         , basicConfig
         , customConfig
+        , onClick
         , onDragStart
         , onDragEnd
         , onDragBy
@@ -24,7 +26,7 @@ import Draggable.CustomInfo as Draggable exposing (Delta)
 import Draggable.CustomInfo.Events as Draggable
 import Html exposing (Html)
 import Html.Attributes exposing (style)
-import Json.Decode
+import Mouse.State as Mouse
 import Position exposing (Position)
 import Svg exposing (Svg)
 import Svg.Attributes as Attr
@@ -74,10 +76,17 @@ type Shape
     | Circle Float
 
 
+{-| Type representing possible targets of interaction.
+-}
+type Target
+    = OnBackground
+    | OnNode NodeId
+
+
 {-| Internal state of the graph view.
 -}
 type alias State =
-    { drag : Draggable.State NodeId }
+    { drag : Draggable.State (Mouse.State Target) }
 
 
 {-| Initial state for the graph view.
@@ -94,11 +103,11 @@ init =
 {-| Configuration of the graph view, with functions that create messages for particular events of the view.
 -}
 type alias Config msg =
-    Draggable.Config NodeId msg
+    Draggable.Config (Mouse.State Target) msg
 
 
 type alias Event msg =
-    Draggable.Event NodeId msg
+    Draggable.Event (Mouse.State Target) msg
 
 
 basicConfig : (Delta -> msg) -> Config msg
@@ -111,7 +120,12 @@ customConfig =
     Draggable.customConfig
 
 
-onDragStart : (NodeId -> msg) -> Event msg
+onClick : (Mouse.State Target -> msg) -> Event msg
+onClick =
+    Draggable.onClick
+
+
+onDragStart : (Mouse.State Target -> msg) -> Event msg
 onDragStart =
     Draggable.onDragStart
 
@@ -133,7 +147,7 @@ onDragEnd =
 {-| Internal messages for dealing with the view logic.
 -}
 type alias InternalMsg =
-    Draggable.Msg NodeId
+    Draggable.Msg (Mouse.State Target)
 
 
 {-| Handle internal update messages for the view model.
@@ -177,7 +191,7 @@ view envelope nodes edges =
             ]
         ]
         [ Svg.defs [] [ arrowhead.svg ]
-        , background
+        , background envelope
         , edges
             |> List.map (\e -> ( toString <| edgeKey e, edgeView e ))
             |> Svg.Keyed.node "g"
@@ -191,8 +205,8 @@ view envelope nodes edges =
         ]
 
 
-background : Svg msg
-background =
+background : (InternalMsg -> msg) -> Svg msg
+background envelope =
     Svg.rect
         [ Attr.width "100%"
         , Attr.height "100%"
@@ -202,6 +216,7 @@ background =
         , Attr.rx "5px"
         , Attr.ry "5px"
         , Attr.cursor "crosshair"
+        , Draggable.mouseTrigger envelope (Mouse.state <| OnBackground)
         ]
         []
 
@@ -218,7 +233,7 @@ nodeView envelope { id, name, x, y, shape } =
                 [ Attr.class "node"
                 , Attr.transform translate
                 , Attr.cursor "pointer"
-                , Draggable.mouseTrigger envelope (Json.Decode.succeed id)
+                , Draggable.mouseTrigger envelope (Mouse.state <| OnNode id)
                 ]
 
         translate =

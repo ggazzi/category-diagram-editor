@@ -1,8 +1,9 @@
 module Main exposing (..)
 
 import Diagram exposing (Diagram, Object, ObjectId, Morphism)
-import GraphView exposing (Shape(..))
-import Html exposing (Html)
+import GraphView exposing (Shape(..), Target(..))
+import Html exposing (Html, div, ul, li, text)
+import Mouse.Modifiers as Mouse
 import Position exposing (Position, Delta, moveBy)
 
 
@@ -23,6 +24,7 @@ main =
 init : ( Model, Cmd Msg )
 init =
     ( { diagram = singleMorphism
+      , uid = 0
       , interaction = Idle
       , graphView = GraphView.init
       }
@@ -50,9 +52,22 @@ singleMorphism =
 
 type alias Model =
     { diagram : Diagram
+    , uid : Int
     , interaction : InteractionState
     , graphView : GraphView.State
     }
+
+
+findUniqueId : Model -> ObjectId
+findUniqueId { uid, diagram } =
+    let
+        find candidate =
+            if diagram |> Diagram.containsObject candidate then
+                find (candidate + 1)
+            else
+                candidate
+    in
+        find uid
 
 
 type InteractionState
@@ -66,6 +81,7 @@ type InteractionState
 
 type Msg
     = NoOp
+    | CreateObjectAt Position
     | StartMovingObject ObjectId
     | DragBy Delta
     | DragEnd
@@ -77,6 +93,24 @@ update msg ({ diagram, interaction } as model) =
     case msg of
         NoOp ->
             ( model, Cmd.none )
+
+        CreateObjectAt { x, y } ->
+            let
+                newId =
+                    findUniqueId model
+
+                newObject =
+                    { x = x
+                    , y = y
+                    , name = "X" ++ toString newId
+                    }
+            in
+                ( { model
+                    | diagram = diagram |> Diagram.insertObject newId newObject
+                    , uid = newId + 1
+                  }
+                , Cmd.none
+                )
 
         StartMovingObject object ->
             ( { model | interaction = MovingObject object }, Cmd.none )
@@ -103,7 +137,22 @@ update msg ({ diagram, interaction } as model) =
 viewConfig : GraphView.Config Msg
 viewConfig =
     GraphView.customConfig
-        [ GraphView.onDragStart StartMovingObject
+        [ GraphView.onClick <|
+            \{ target, modifiers, position } ->
+                case ( target, Mouse.hasShift modifiers ) of
+                    ( OnBackground, True ) ->
+                        CreateObjectAt position
+
+                    _ ->
+                        NoOp
+        , GraphView.onDragStart <|
+            \{ target } ->
+                case target of
+                    OnNode id ->
+                        StartMovingObject id
+
+                    OnBackground ->
+                        NoOp
         , GraphView.onDragBy DragBy
         , GraphView.onDragEnd DragEnd
         ]
@@ -124,10 +173,23 @@ subscriptions { graphView } =
 
 view : Model -> Html Msg
 view ({ diagram } as model) =
-    GraphView.view
-        GraphViewMsg
-        (objectsAsNodes diagram)
-        (morphismsAsEdges diagram)
+    div []
+        [ instructions
+        , GraphView.view
+            GraphViewMsg
+            (objectsAsNodes diagram)
+            (morphismsAsEdges diagram)
+        ]
+
+
+instructions : Html msg
+instructions =
+    div []
+        [ ul []
+            [ li [] [ text "Drag objects to move them" ]
+            , li [] [ text "Shift+click on the background to add objects" ]
+            ]
+        ]
 
 
 objectsAsNodes : Diagram -> List GraphView.Node
