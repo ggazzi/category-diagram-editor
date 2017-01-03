@@ -20,10 +20,11 @@ module GraphView
         , view
         )
 
-import Draggable exposing (Delta)
-import Draggable.Events as Draggable
+import Draggable.CustomInfo as Draggable exposing (Delta)
+import Draggable.CustomInfo.Events as Draggable
 import Html exposing (Html)
 import Html.Attributes exposing (style)
+import Json.Decode
 import Position exposing (Position)
 import Svg exposing (Svg)
 import Svg.Attributes as Attr
@@ -76,7 +77,7 @@ type Shape
 {-| Internal state of the graph view.
 -}
 type alias State =
-    { drag : Draggable.State }
+    { drag : Draggable.State NodeId }
 
 
 {-| Initial state for the graph view.
@@ -93,11 +94,11 @@ init =
 {-| Configuration of the graph view, with functions that create messages for particular events of the view.
 -}
 type alias Config msg =
-    Draggable.Config msg
+    Draggable.Config NodeId msg
 
 
 type alias Event msg =
-    Draggable.Event msg
+    Draggable.Event NodeId msg
 
 
 basicConfig : (Delta -> msg) -> Config msg
@@ -110,7 +111,7 @@ customConfig =
     Draggable.customConfig
 
 
-onDragStart : (String -> msg) -> Event msg
+onDragStart : (NodeId -> msg) -> Event msg
 onDragStart =
     Draggable.onDragStart
 
@@ -132,7 +133,7 @@ onDragEnd =
 {-| Internal messages for dealing with the view logic.
 -}
 type alias InternalMsg =
-    Draggable.Msg
+    Draggable.Msg NodeId
 
 
 {-| Handle internal update messages for the view model.
@@ -217,7 +218,7 @@ nodeView envelope { id, name, x, y, shape } =
                 [ Attr.class "node"
                 , Attr.transform translate
                 , Attr.cursor "pointer"
-                , Draggable.mouseTrigger (toString id) envelope
+                , Draggable.mouseTrigger envelope (Json.Decode.succeed id)
                 ]
 
         translate =

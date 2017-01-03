@@ -102,20 +102,11 @@ update msg ({ diagram, interaction } as model) =
 
 viewConfig : GraphView.Config Msg
 viewConfig =
-    let
-        startMovingObject key =
-            case String.toInt key of
-                Err _ ->
-                    NoOp
-
-                Ok id ->
-                    StartMovingObject id
-    in
-        GraphView.customConfig
-            [ GraphView.onDragStart startMovingObject
-            , GraphView.onDragBy DragBy
-            , GraphView.onDragEnd DragEnd
-            ]
+    GraphView.customConfig
+        [ GraphView.onDragStart StartMovingObject
+        , GraphView.onDragBy DragBy
+        , GraphView.onDragEnd DragEnd
+        ]
 
 
 
