@@ -1,8 +1,12 @@
 module Main exposing (..)
 
 import Diagram exposing (Diagram, Object, Morphism)
+import Draggable
+import Draggable.Events as Draggable
+import Diagram exposing (Diagram, Object, ObjectId, Morphism)
 import Html exposing (Html)
 import Html.Attributes exposing (style)
+import Position exposing (Position, Delta, moveBy)
 import Svg exposing (Svg)
 import Svg.Attributes as Attr
 import Svg.Keyed
@@ -24,7 +28,12 @@ main =
 
 init : ( Model, Cmd Msg )
 init =
-    ( { diagram = singleMorphism }, Cmd.none )
+    ( { diagram = singleMorphism
+      , interaction = Idle
+      , drag = Draggable.init
+      }
+    , Cmd.none
+    )
 
 
 singleMorphism : Diagram
@@ -46,7 +55,15 @@ singleMorphism =
 
 
 type alias Model =
-    { diagram : Diagram }
+    { diagram : Diagram
+    , interaction : InteractionState
+    , drag : Draggable.State
+    }
+
+
+type InteractionState
+    = Idle
+    | MovingObject ObjectId
 
 
 
@@ -55,13 +72,56 @@ type alias Model =
 
 type Msg
     = NoOp
+    | StartMovingObject ObjectId
+    | DragBy Delta
+    | DragEnd
+    | DragMsg Draggable.Msg
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
-update msg model =
+update msg ({ diagram, interaction } as model) =
     case msg of
         NoOp ->
             ( model, Cmd.none )
+
+        StartMovingObject object ->
+            ( { model | interaction = MovingObject object }, Cmd.none )
+
+        DragBy delta ->
+            case interaction of
+                MovingObject object ->
+                    ( { model
+                        | diagram = diagram |> Diagram.modifyObject object (moveBy delta)
+                      }
+                    , Cmd.none
+                    )
+
+                Idle ->
+                    ( model, Cmd.none )
+
+        DragEnd ->
+            ( { model | interaction = Idle }, Cmd.none )
+
+        DragMsg dragMsg ->
+            Draggable.update dragConfig dragMsg model
+
+
+dragConfig : Draggable.Config Msg
+dragConfig =
+    let
+        startDragging key =
+            case String.toInt key of
+                Err _ ->
+                    NoOp
+
+                Ok id ->
+                    StartMovingObject id
+    in
+        Draggable.customConfig
+            [ Draggable.onDragStart startDragging
+            , Draggable.onDragBy DragBy
+            , Draggable.onDragEnd DragEnd
+            ]
 
 
 
@@ -69,8 +129,8 @@ update msg model =
 
 
 subscriptions : Model -> Sub Msg
-subscriptions _ =
-    Sub.none
+subscriptions { drag } =
+    Draggable.subscriptions DragMsg drag
 
 
 
@@ -205,14 +265,14 @@ objectsView : Diagram -> Svg Msg
 objectsView diagram =
     diagram
         |> Diagram.objectsWithIds
-        |> List.map (\( id, obj ) -> ( toString id, objectView obj ))
+        |> List.map (\( id, obj ) -> ( toString id, objectView id obj ))
         |> Svg.Keyed.node "g"
             [ Attr.class "objects-view"
             ]
 
 
-objectView : Object -> Svg Msg
-objectView { x, y, name } =
+objectView : ObjectId -> Object -> Svg Msg
+objectView id { x, y, name } =
     let
         translate =
             "translate("
@@ -224,6 +284,7 @@ objectView { x, y, name } =
         Svg.g
             [ Attr.class "object"
             , Attr.transform translate
+            , Draggable.mouseTrigger (toString id) DragMsg
             ]
             [ Svg.circle
                 [ Attr.r (toString objectRadius)
