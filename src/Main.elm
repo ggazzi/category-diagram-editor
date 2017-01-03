@@ -1,15 +1,9 @@
 module Main exposing (..)
 
-import Diagram exposing (Diagram, Object, Morphism)
-import Draggable
-import Draggable.Events as Draggable
 import Diagram exposing (Diagram, Object, ObjectId, Morphism)
+import GraphView exposing (Shape(..))
 import Html exposing (Html)
-import Html.Attributes exposing (style)
 import Position exposing (Position, Delta, moveBy)
-import Svg exposing (Svg)
-import Svg.Attributes as Attr
-import Svg.Keyed
 
 
 main : Program Never Model Msg
@@ -30,7 +24,7 @@ init : ( Model, Cmd Msg )
 init =
     ( { diagram = singleMorphism
       , interaction = Idle
-      , drag = Draggable.init
+      , graphView = GraphView.init
       }
     , Cmd.none
     )
@@ -57,7 +51,7 @@ singleMorphism =
 type alias Model =
     { diagram : Diagram
     , interaction : InteractionState
-    , drag : Draggable.State
+    , graphView : GraphView.State
     }
 
 
@@ -75,7 +69,7 @@ type Msg
     | StartMovingObject ObjectId
     | DragBy Delta
     | DragEnd
-    | DragMsg Draggable.Msg
+    | GraphViewMsg GraphView.InternalMsg
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -102,14 +96,14 @@ update msg ({ diagram, interaction } as model) =
         DragEnd ->
             ( { model | interaction = Idle }, Cmd.none )
 
-        DragMsg dragMsg ->
-            Draggable.update dragConfig dragMsg model
+        GraphViewMsg graphViewMsg ->
+            GraphView.update viewConfig graphViewMsg model
 
 
-dragConfig : Draggable.Config Msg
-dragConfig =
+viewConfig : GraphView.Config Msg
+viewConfig =
     let
-        startDragging key =
+        startMovingObject key =
             case String.toInt key of
                 Err _ ->
                     NoOp
@@ -117,10 +111,10 @@ dragConfig =
                 Ok id ->
                     StartMovingObject id
     in
-        Draggable.customConfig
-            [ Draggable.onDragStart startDragging
-            , Draggable.onDragBy DragBy
-            , Draggable.onDragEnd DragEnd
+        GraphView.customConfig
+            [ GraphView.onDragStart startMovingObject
+            , GraphView.onDragBy DragBy
+            , GraphView.onDragEnd DragEnd
             ]
 
 
@@ -129,8 +123,8 @@ dragConfig =
 
 
 subscriptions : Model -> Sub Msg
-subscriptions { drag } =
-    Draggable.subscriptions DragMsg drag
+subscriptions { graphView } =
+    GraphView.subscriptions GraphViewMsg graphView
 
 
 
@@ -138,162 +132,38 @@ subscriptions { drag } =
 
 
 view : Model -> Html Msg
-view model =
-    Svg.svg
-        [ style
-            [ ( "margin", "20px" )
-            , ( "width", "800px" )
-            , ( "height", "600px" )
-            ]
-        ]
-        [ Svg.defs [] [ arrowhead.svg ]
-        , background
-        , morphismsView model.diagram
-        , objectsView model.diagram
-        ]
+view ({ diagram } as model) =
+    GraphView.view
+        GraphViewMsg
+        (objectsAsNodes diagram)
+        (morphismsAsEdges diagram)
 
 
-type alias Marker a =
-    { id : String
-    , length : Float
-    , svg : Svg a
-    }
+objectsAsNodes : Diagram -> List GraphView.Node
+objectsAsNodes =
+    Diagram.objectsWithIds
+        >> List.map
+            (\( id, { x, y, name } ) ->
+                { id = id
+                , name = name
+                , x = x
+                , y = y
+                , shape = nodeShape
+                }
+            )
 
 
-edgeColor : String
-edgeColor =
-    "black"
+morphismsAsEdges : Diagram -> List GraphView.Edge
+morphismsAsEdges =
+    Diagram.morphismsWithIds
+        >> List.map
+            (\( dom, ( domId, codId ), _, cod ) ->
+                { source = { x = dom.x, y = dom.y, key = Just domId, shape = nodeShape }
+                , target = { x = cod.x, y = cod.y, key = Just codId, shape = nodeShape }
+                }
+            )
 
 
-arrowhead : Marker a
-arrowhead =
-    { id = "arrowhead"
-    , length = 2
-    , svg =
-        Svg.marker
-            [ Attr.id "arrowhead"
-            , Attr.viewBox "0 -5 10 10"
-            , Attr.refX "8"
-            , Attr.markerWidth "4"
-            , Attr.markerHeight "6"
-            , Attr.orient "auto"
-            ]
-            [ Svg.path
-                [ Attr.d "M0,-5L10,0L0,5"
-                , Attr.fill "transparent"
-                , Attr.stroke edgeColor
-                , Attr.strokeWidth "2"
-                ]
-                []
-            ]
-    }
-
-
-background : Svg Msg
-background =
-    Svg.rect
-        [ Attr.width "100%"
-        , Attr.height "100%"
-        , Attr.fill "transparent"
-        , Attr.stroke "lightgrey"
-        , Attr.strokeWidth "2px"
-        , Attr.rx "5px"
-        , Attr.ry "5px"
-        ]
-        []
-
-
-morphismsView : Diagram -> Svg Msg
-morphismsView diagram =
-    let
-        keyedMorphismView ( src, id, edge, tgt ) =
-            ( toString id, morphismView src edge tgt )
-    in
-        diagram
-            |> Diagram.morphismsWithIds
-            |> List.map keyedMorphismView
-            |> Svg.Keyed.node "g"
-                [ Attr.class "morphisms-view"
-                , Attr.stroke "black"
-                ]
-
-
-morphismView : Object -> Morphism -> Object -> Svg Msg
-morphismView src edge tgt =
-    let
-        -- Displace endpoints according to object radius
-        src_ =
-            displaceBy objectRadius src
-
-        tgt_ =
-            displaceBy -(objectRadius + arrowhead.length) tgt
-
-        displaceBy amount { x, y } =
-            { x = x + amount * dx / length
-            , y = y + amount * dy / length
-            }
-
-        dx =
-            tgt.x - src.x
-
-        dy =
-            tgt.y - src.y
-
-        length =
-            sqrt (dx * dx + dy * dy)
-
-        path =
-            ("M" ++ toString src_.x ++ "," ++ toString src_.y)
-                ++ ("L" ++ toString tgt_.x ++ "," ++ toString tgt_.y)
-    in
-        Svg.path
-            [ Attr.class "morphism"
-            , Attr.d path
-            , Attr.stroke edgeColor
-            , Attr.strokeWidth "2"
-            , Attr.markerEnd ("url(#" ++ arrowhead.id ++ ")")
-            ]
-            []
-
-
-objectRadius : Float
-objectRadius =
-    20
-
-
-objectsView : Diagram -> Svg Msg
-objectsView diagram =
-    diagram
-        |> Diagram.objectsWithIds
-        |> List.map (\( id, obj ) -> ( toString id, objectView id obj ))
-        |> Svg.Keyed.node "g"
-            [ Attr.class "objects-view"
-            ]
-
-
-objectView : ObjectId -> Object -> Svg Msg
-objectView id { x, y, name } =
-    let
-        translate =
-            "translate("
-                ++ toString x
-                ++ ","
-                ++ toString y
-                ++ ")"
-    in
-        Svg.g
-            [ Attr.class "object"
-            , Attr.transform translate
-            , Draggable.mouseTrigger (toString id) DragMsg
-            ]
-            [ Svg.circle
-                [ Attr.r (toString objectRadius)
-                , Attr.fill "transparent"
-                , Attr.stroke "lightgrey"
-                , Attr.strokeWidth "1px"
-                ]
-                []
-            , Svg.text_ [ Attr.textAnchor "middle", Attr.y "5" ]
-                [ Svg.text name
-                ]
-            ]
+nodeShape : Shape
+nodeShape =
+    Circle 15
