@@ -1,7 +1,6 @@
 module Main exposing (..)
 
 import Diagram exposing (Diagram, Object, Morphism)
-import Graph exposing (Graph, Node, Edge)
 import Html exposing (Html)
 import Html.Attributes exposing (style)
 import Svg exposing (Svg)
@@ -11,7 +10,35 @@ import Svg.Keyed
 
 main : Program Never Model Msg
 main =
-    Html.beginnerProgram { model = model, view = view, update = update }
+    Html.program
+        { init = init
+        , update = update
+        , subscriptions = subscriptions
+        , view = view
+        }
+
+
+
+-- INIT
+
+
+init : ( Model, Cmd Msg )
+init =
+    ( { diagram = singleMorphism }, Cmd.none )
+
+
+singleMorphism : Diagram
+singleMorphism =
+    let
+        objects =
+            [ ( 0, Object 100 100 "A" )
+            , ( 1, Object 100 200 "B" )
+            ]
+
+        morphisms =
+            [ ( ( 0, 1 ), Morphism "f" ) ]
+    in
+        Diagram.fromObjectsAndMorphisms objects morphisms
 
 
 
@@ -22,25 +49,6 @@ type alias Model =
     { diagram : Diagram }
 
 
-model : Model
-model =
-    { diagram = singleMorphism }
-
-
-singleMorphism : Diagram
-singleMorphism =
-    let
-        nodes =
-            [ Node 0 (Object 100 100 "A")
-            , Node 1 (Object 100 200 "B")
-            ]
-
-        edges =
-            [ Edge 0 1 (Morphism "f") ]
-    in
-        Graph.fromNodesAndEdges nodes edges
-
-
 
 -- UPDATE
 
@@ -49,11 +57,20 @@ type Msg
     = NoOp
 
 
-update : Msg -> Model -> Model
+update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
         NoOp ->
-            model
+            ( model, Cmd.none )
+
+
+
+-- SUBSCRIPTIONS
+
+
+subscriptions : Model -> Sub Msg
+subscriptions _ =
+    Sub.none
 
 
 
@@ -187,8 +204,8 @@ objectRadius =
 objectsView : Diagram -> Svg Msg
 objectsView diagram =
     diagram
-        |> Graph.nodes
-        |> List.map (\n -> ( toString n.id, objectView n.label ))
+        |> Diagram.objectsWithIds
+        |> List.map (\( id, obj ) -> ( toString id, objectView obj ))
         |> Svg.Keyed.node "g"
             [ Attr.class "objects-view"
             ]
