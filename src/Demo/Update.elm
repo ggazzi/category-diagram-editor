@@ -86,6 +86,9 @@ update msg ({ diagram, interaction, selection } as model) =
                 ( { model
                     | diagram = diagram |> Diagram.insertObject newId newObject
                     , uid = newId + 1
+                    , selection =
+                        Selection.empty
+                        -- When a new object is created, the selection should be reset
                   }
                 , Cmd.none
                 )
