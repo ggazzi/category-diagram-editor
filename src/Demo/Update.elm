@@ -29,7 +29,7 @@ type Msg
     | StartCreatingMorphismFrom ObjectId
     | CreateMorphismTo ObjectId
       -- Drag-related events
-    | StartMovingObject ObjectId
+    | StartMovingObjects ObjectId
     | DragBy Delta
     | DragEnd
     | GraphViewMsg GraphView.InternalMsg
@@ -116,14 +116,17 @@ update msg ({ diagram, interaction, selection } as model) =
                     ( model, Cmd.none )
 
         -- Drag-related events
-        StartMovingObject objectId ->
-            ( { model | interaction = MovingObject objectId }, Cmd.none )
+        StartMovingObjects objectId ->
+            if selection |> Selection.hasObject objectId then
+                ( { model | interaction = MovingObjects <| Selection.objects selection }, Cmd.none )
+            else
+                ( { model | interaction = MovingObjects [ objectId ] }, Cmd.none )
 
         DragBy delta ->
             case interaction of
-                MovingObject objectId ->
+                MovingObjects objectIds ->
                     ( { model
-                        | diagram = diagram |> Diagram.modifyObject objectId (moveBy delta)
+                        | diagram = diagram |> Diagram.modifyObjects objectIds (moveBy delta)
                       }
                     , Cmd.none
                     )
@@ -174,7 +177,7 @@ graphViewConfig =
             \{ target, modifiers } ->
                 case ( target, Mouse.hasShift modifiers ) of
                     ( OnNode id, False ) ->
-                        StartMovingObject id
+                        StartMovingObjects id
 
                     ( OnNode id, True ) ->
                         StartCreatingMorphismFrom id

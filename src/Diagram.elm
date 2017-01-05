@@ -14,6 +14,7 @@ module Diagram
         , getObject
         , insertObject
         , modifyObject
+        , modifyObjects
         , insertMorphism
         , encode
         , decode
@@ -167,6 +168,13 @@ modifyObject id modify =
             }
     in
         Graph.update id (Maybe.map modifyContext)
+
+
+{-| Modify all objects associated to the given identifier, ignoring the identifiers that have no objects in the diagram.
+-}
+modifyObjects : List ObjectId -> (Object -> Object) -> Diagram -> Diagram
+modifyObjects ids modify originalDiagram =
+    List.foldl (\id diagram -> modifyObject id modify diagram) originalDiagram ids
 
 
 {-| Insert an object, associating it to the given identifier. If there was already such an object, replaces it.

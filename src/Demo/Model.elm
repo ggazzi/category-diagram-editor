@@ -17,7 +17,7 @@ type alias Model =
 
 type InteractionState
     = Idle
-    | MovingObject ObjectId
+    | MovingObjects (List ObjectId)
     | CreatingMorphismFrom ObjectId Position
 
 
