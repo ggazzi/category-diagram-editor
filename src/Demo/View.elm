@@ -33,13 +33,26 @@ view ({ diagram, selection } as model) =
 
 instructions : Html msg
 instructions =
-    div []
-        [ ul []
-            [ li [] [ text "Drag objects to move them" ]
-            , li [] [ text "Shift+click on the background to add objects" ]
-            , li [] [ text "Shift+drag between nodes to add an morphisms" ]
+    let
+        section title items =
+            [ h2 [] [ text title ]
+            , ul [] <| List.map (\x -> li [] [ text x ]) items
             ]
-        ]
+    in
+        (div [] << List.concat) <|
+            [ section "Selection"
+                [ "Click to select a single object"
+                , "Shift+click to add an object to the selection"
+                ]
+            , section "Moving Objects"
+                [ "Drag objects to move them"
+                , "Dragging a selected object will move all selected objects"
+                ]
+            , section "Adding Objects/Morphisms"
+                [ "Shift+click the background to add objects"
+                , "Shift+drag between objects to add morphisms"
+                ]
+            ]
 
 
 textView : Diagram -> Html Msg
