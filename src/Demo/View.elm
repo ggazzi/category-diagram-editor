@@ -13,8 +13,9 @@ view ({ diagram } as model) =
         [ instructions
         , GraphView.view
             GraphViewMsg
+            graphViewConfig
             (objectsAsNodes diagram)
-            (morphismsAsEdges diagram)
+            (morphismsAsEdges diagram ++ morphismBeingCreated model)
         ]
 
 
@@ -24,6 +25,7 @@ instructions =
         [ ul []
             [ li [] [ text "Drag objects to move them" ]
             , li [] [ text "Shift+click on the background to add objects" ]
+            , li [] [ text "Shift+drag between nodes to add an morphisms" ]
             ]
         ]
 
@@ -51,6 +53,24 @@ morphismsAsEdges =
                 , target = { x = cod.x, y = cod.y, key = Just codId, shape = nodeShape }
                 }
             )
+
+
+morphismBeingCreated : Model -> List GraphView.Edge
+morphismBeingCreated { interaction, diagram } =
+    case interaction of
+        CreatingMorphismFrom domainId mousePos ->
+            case diagram |> Diagram.getObject domainId of
+                Just domain ->
+                    [ { source = { x = domain.x, y = domain.y, key = Just domainId, shape = nodeShape }
+                      , target = { x = mousePos.x, y = mousePos.y, key = Nothing, shape = None }
+                      }
+                    ]
+
+                Nothing ->
+                    []
+
+        _ ->
+            []
 
 
 nodeShape : Shape

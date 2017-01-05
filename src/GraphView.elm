@@ -16,6 +16,7 @@ module GraphView
         , onDragStart
         , onDragEnd
         , onDragBy
+        , onMouseUp
         , InternalMsg
         , update
         , subscriptions
@@ -26,10 +27,12 @@ import Draggable.CustomInfo as Draggable exposing (Delta)
 import Draggable.CustomInfo.Events as Draggable
 import Html exposing (Html)
 import Html.Attributes exposing (style)
+import Json.Decode as Json
 import Mouse.State as Mouse
 import Position exposing (Position)
 import Svg exposing (Svg)
 import Svg.Attributes as Attr
+import Svg.Events as Svg
 import Svg.Keyed
 
 
@@ -102,42 +105,84 @@ init =
 
 {-| Configuration of the graph view, with functions that create messages for particular events of the view.
 -}
-type alias Config msg =
-    Draggable.Config (Mouse.State Target) msg
+type Config msg
+    = Config
+        { dragConfig : Draggable.Config (Mouse.State Target) msg
+        , onMouseUp : Target -> Maybe (Json.Decoder msg)
+        }
 
 
-type alias Event msg =
-    Draggable.Event (Mouse.State Target) msg
+type Event msg
+    = FunctionEvent (Config msg -> Config msg)
+    | DraggableEvent (Draggable.Event (Mouse.State Target) msg)
+
+
+defaultConfig : Draggable.Config (Mouse.State Target) msg -> Config msg
+defaultConfig dragConfig =
+    Config
+        { dragConfig = dragConfig
+        , onMouseUp = \_ -> Nothing
+        }
 
 
 basicConfig : (Delta -> msg) -> Config msg
 basicConfig =
-    Draggable.basicConfig
+    defaultConfig << Draggable.basicConfig
 
 
 customConfig : List (Event msg) -> Config msg
-customConfig =
-    Draggable.customConfig
+customConfig events =
+    let
+        initialConfig =
+            defaultConfig <| Draggable.customConfig <| List.filterMap asDraggableEvent events
+
+        asDraggableEvent event =
+            case event of
+                FunctionEvent _ ->
+                    Nothing
+
+                DraggableEvent ev ->
+                    Just ev
+
+        asFunction event =
+            case event of
+                FunctionEvent f ->
+                    Just f
+
+                DraggableEvent _ ->
+                    Nothing
+
+        applyAllTo initial =
+            List.foldl (<|) initial
+    in
+        events
+            |> List.filterMap asFunction
+            |> applyAllTo initialConfig
 
 
 onClick : (Mouse.State Target -> msg) -> Event msg
 onClick =
-    Draggable.onClick
+    DraggableEvent << Draggable.onClick
 
 
 onDragStart : (Mouse.State Target -> msg) -> Event msg
 onDragStart =
-    Draggable.onDragStart
+    DraggableEvent << Draggable.onDragStart
 
 
 onDragBy : (Delta -> msg) -> Event msg
 onDragBy =
-    Draggable.onDragBy
+    DraggableEvent << Draggable.onDragBy
 
 
 onDragEnd : msg -> Event msg
 onDragEnd =
-    Draggable.onDragEnd
+    DraggableEvent << Draggable.onDragEnd
+
+
+onMouseUp : (Target -> Maybe (Json.Decoder msg)) -> Event msg
+onMouseUp decoder =
+    FunctionEvent <| \(Config config) -> Config { config | onMouseUp = decoder }
 
 
 
@@ -153,10 +198,10 @@ type alias InternalMsg =
 {-| Handle internal update messages for the view model.
 -}
 update : Config msg -> InternalMsg -> { model | graphView : State } -> ( { model | graphView : State }, Cmd msg )
-update config msg ({ graphView } as model) =
+update (Config { dragConfig }) msg ({ graphView } as model) =
     let
         ( graphView_, cmd ) =
-            Draggable.update config msg graphView
+            Draggable.update dragConfig msg graphView
     in
         ( { model | graphView = graphView_ }, cmd )
 
@@ -181,8 +226,8 @@ Create a graph view. The first argument wraps internal messagens into an envelop
 
   __Note:__ The `List Node` and `List Edge` arguments should be computed with information from the model, but generally not stored in it. The `Config` is view or update code and should generally be kept separate from the model.
 -}
-view : (InternalMsg -> msg) -> List Node -> List Edge -> Html msg
-view envelope nodes edges =
+view : (InternalMsg -> msg) -> Config msg -> List Node -> List Edge -> Html msg
+view envelope config nodes edges =
     Svg.svg
         [ style
             [ ( "margin", "20px" )
@@ -191,7 +236,7 @@ view envelope nodes edges =
             ]
         ]
         [ Svg.defs [] [ arrowhead.svg ]
-        , background envelope
+        , background envelope config
         , edges
             |> List.map (\e -> ( toString <| edgeKey e, edgeView e ))
             |> Svg.Keyed.node "g"
@@ -200,24 +245,25 @@ view envelope nodes edges =
                 , Attr.cursor "pointer"
                 ]
         , nodes
-            |> List.map (\node -> ( toString node.id, nodeView envelope node ))
+            |> List.map (\node -> ( toString node.id, nodeView envelope config node ))
             |> Svg.Keyed.node "g" [ Attr.class "nodes-view" ]
         ]
 
 
-background : (InternalMsg -> msg) -> Svg msg
-background envelope =
+background : (InternalMsg -> msg) -> Config msg -> Svg msg
+background envelope config =
     Svg.rect
-        [ Attr.width "100%"
-        , Attr.height "100%"
-        , Attr.fill "transparent"
-        , Attr.stroke "lightgrey"
-        , Attr.strokeWidth "2px"
-        , Attr.rx "5px"
-        , Attr.ry "5px"
-        , Attr.cursor "crosshair"
-        , Draggable.mouseTrigger envelope (Mouse.state <| OnBackground)
-        ]
+        ([ Attr.width "100%"
+         , Attr.height "100%"
+         , Attr.fill "transparent"
+         , Attr.stroke "lightgrey"
+         , Attr.strokeWidth "2px"
+         , Attr.rx "5px"
+         , Attr.ry "5px"
+         , Attr.cursor "crosshair"
+         ]
+            ++ handlerAttributes envelope config OnBackground
+        )
         []
 
 
@@ -225,16 +271,17 @@ background envelope =
 -- NODES
 
 
-nodeView : (InternalMsg -> msg) -> Node -> Svg msg
-nodeView envelope { id, name, x, y, shape } =
+nodeView : (InternalMsg -> msg) -> Config msg -> Node -> Svg msg
+nodeView envelope config { id, name, x, y, shape } =
     let
         nodeWrapper =
             Svg.g
-                [ Attr.class "node"
-                , Attr.transform translate
-                , Attr.cursor "pointer"
-                , Draggable.mouseTrigger envelope (Mouse.state <| OnNode id)
-                ]
+                ([ Attr.class "node"
+                 , Attr.transform translate
+                 , Attr.cursor "pointer"
+                 ]
+                    ++ handlerAttributes envelope config (OnNode id)
+                )
 
         translate =
             "translate(" ++ toString x ++ "," ++ toString y ++ ")"
@@ -333,6 +380,16 @@ targetDisplacement { shape } =
 
 
 -- UTILITIES
+
+
+handlerAttributes : (InternalMsg -> msg) -> Config msg -> Target -> List (Svg.Attribute msg)
+handlerAttributes envelope (Config { dragConfig, onMouseUp }) target =
+    let
+        asHandlerAttribute ( event, handler ) =
+            Maybe.map (Svg.on event) handler
+    in
+        Draggable.mouseTrigger envelope (Mouse.state <| target)
+            :: List.filterMap asHandlerAttribute [ ( "mouseup", onMouseUp target ) ]
 
 
 type alias Marker a =

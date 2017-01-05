@@ -1,7 +1,8 @@
-module Demo.Model exposing (Model, InteractionState, findUniqueId)
+module Demo.Model exposing (Model, InteractionState(..), findUniqueId)
 
 import Diagram exposing (Diagram, ObjectId)
 import GraphView
+import Position exposing (Position)
 
 
 type alias Model =
@@ -15,6 +16,7 @@ type alias Model =
 type InteractionState
     = Idle
     | MovingObject ObjectId
+    | CreatingMorphismFrom ObjectId Position
 
 
 findUniqueId : Model -> ObjectId
