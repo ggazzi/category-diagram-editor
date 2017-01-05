@@ -7,9 +7,9 @@ module Demo.Update
         )
 
 import Demo.Model exposing (..)
-import Diagram exposing (ObjectId)
+import Diagram exposing (Diagram, ObjectId)
 import GraphView exposing (Target(..))
-import Json.Decode as Json
+import Json.Decode
 import Mouse.Modifiers as Mouse
 import Position exposing (Position, Delta, moveBy)
 
@@ -19,6 +19,7 @@ import Position exposing (Position, Delta, moveBy)
 
 type Msg
     = NoOp
+    | SetDiagram Diagram
       -- Creation of objects/morphisms
     | CreateObjectAt Position
     | StartCreatingMorphismFrom ObjectId
@@ -35,6 +36,9 @@ update msg ({ diagram, interaction } as model) =
     case msg of
         NoOp ->
             ( model, Cmd.none )
+
+        SetDiagram newDiagram ->
+            ( { model | diagram = newDiagram }, Cmd.none )
 
         -- Creation of objects/morphisms
         CreateObjectAt { x, y } ->
@@ -120,7 +124,7 @@ graphViewConfig =
                         Nothing
 
                     OnNode id ->
-                        Just (Json.succeed (CreateMorphismTo id))
+                        Just (Json.Decode.succeed (CreateMorphismTo id))
         , GraphView.onClick <|
             \{ target, modifiers, position } ->
                 case ( target, Mouse.hasShift modifiers ) of
