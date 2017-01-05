@@ -4,11 +4,13 @@ module Diagram.Selection
         , empty
         , singleObject
         , singleMorphism
+        , fromObjectsAndMorphisms
         , hasObject
         , hasMorphism
         , objects
         , morphisms
         , addObject
+        , addObjects
         , addMorphism
         , removeObject
         , removeMorphism
@@ -39,6 +41,11 @@ singleMorphism id =
     { objects = Set.empty, morphisms = Set.singleton id }
 
 
+fromObjectsAndMorphisms : List ObjectId -> List MorphismId -> Selection
+fromObjectsAndMorphisms objects morphisms =
+    { objects = Set.fromList objects, morphisms = Set.fromList morphisms }
+
+
 hasObject : ObjectId -> Selection -> Bool
 hasObject id =
     .objects >> Set.member id
@@ -62,6 +69,11 @@ morphisms =
 addObject : ObjectId -> Selection -> Selection
 addObject id ({ objects } as selection) =
     { selection | objects = objects |> Set.insert id }
+
+
+addObjects : List ObjectId -> Selection -> Selection
+addObjects ids ({ objects } as selection) =
+    { selection | objects = objects |> Set.union (Set.fromList ids) }
 
 
 addMorphism : MorphismId -> Selection -> Selection

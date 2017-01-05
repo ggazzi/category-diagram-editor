@@ -10,10 +10,13 @@ import Html.Attributes as Html exposing (style)
 import Html.Events as Html
 import Json.Encode
 import Json.Decode
+import Position exposing (Position)
+import Svg exposing (Svg)
+import Svg.Attributes as Attr
 
 
 view : Model -> Html Msg
-view ({ diagram, selection } as model) =
+view ({ diagram, selection, interaction } as model) =
     div
         [ style
             [ ( "max-width", "60em" )
@@ -27,6 +30,7 @@ view ({ diagram, selection } as model) =
             graphViewConfig
             (objectsAsNodes diagram selection)
             (morphismsAsEdges diagram ++ morphismBeingCreated model)
+            [ selectionRectangle interaction ]
         , textView diagram
         ]
 
@@ -87,6 +91,27 @@ textView diagram =
             ]
 
 
+selectionRectangle : InteractionState -> Svg msg
+selectionRectangle interaction =
+    case interaction of
+        SelectingRectangle { start, end } ->
+            Svg.path
+                [ Attr.fill "transparent"
+                , Attr.stroke "lightgrey"
+                , Attr.strokeWidth "1"
+                , Attr.d <|
+                    moveTo start
+                        ++ lineTo { x = start.x, y = end.y }
+                        ++ lineTo end
+                        ++ lineTo { x = end.x, y = start.y }
+                        ++ closePath
+                ]
+                []
+
+        _ ->
+            Svg.g [] []
+
+
 objectsAsNodes : Diagram -> Selection -> List GraphView.Node
 objectsAsNodes diagram selection =
     diagram
@@ -135,3 +160,26 @@ morphismBeingCreated { interaction, diagram } =
 nodeShape : Shape
 nodeShape =
     Circle 15
+
+
+
+-- UTILITIES
+
+
+type alias PathFragment =
+    String
+
+
+moveTo : Position -> PathFragment
+moveTo { x, y } =
+    "M" ++ toString x ++ " " ++ toString y
+
+
+lineTo : Position -> PathFragment
+lineTo { x, y } =
+    "L" ++ toString x ++ " " ++ toString y
+
+
+closePath : PathFragment
+closePath =
+    "Z"

@@ -24,20 +24,17 @@ type Msg
       -- Selection of objects
     | ClearSelection
     | SelectObject ObjectId SelectionMode
+    | StartSelectingRectangle Position SelectionMode
       -- Creation of objects/morphisms
     | CreateObjectAt Position
     | StartCreatingMorphismFrom ObjectId
     | CreateMorphismTo ObjectId
-      -- Drag-related events
+      -- Moving objects
     | StartMovingObjects ObjectId
+      -- Drag-related events
     | DragBy Delta
     | DragEnd
     | GraphViewMsg GraphView.InternalMsg
-
-
-type SelectionMode
-    = SetSelection
-    | AddToSelection
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -70,6 +67,13 @@ update msg ({ diagram, interaction, selection } as model) =
                         ( { model | selection = selection |> Selection.removeObject objectId }, Cmd.none )
                     else
                         ( { model | selection = selection |> Selection.addObject objectId }, Cmd.none )
+
+        StartSelectingRectangle position mode ->
+            ( { model
+                | interaction = SelectingRectangle { start = position, end = position, mode = mode }
+              }
+            , Cmd.none
+            )
 
         -- Creation of objects/morphisms
         CreateObjectAt { x, y } ->
@@ -118,13 +122,14 @@ update msg ({ diagram, interaction, selection } as model) =
                 _ ->
                     ( model, Cmd.none )
 
-        -- Drag-related events
+        -- Moving objects
         StartMovingObjects objectId ->
             if selection |> Selection.hasObject objectId then
                 ( { model | interaction = MovingObjects <| Selection.objects selection }, Cmd.none )
             else
                 ( { model | interaction = MovingObjects [ objectId ] }, Cmd.none )
 
+        -- Drag-related events
         DragBy delta ->
             case interaction of
                 MovingObjects objectIds ->
@@ -141,11 +146,40 @@ update msg ({ diagram, interaction, selection } as model) =
                     , Cmd.none
                     )
 
+                SelectingRectangle ({ end } as rectangle) ->
+                    ( { model
+                        | interaction = SelectingRectangle { rectangle | end = end |> moveBy delta }
+                      }
+                    , Cmd.none
+                    )
+
                 Idle ->
                     ( model, Cmd.none )
 
         DragEnd ->
-            ( { model | interaction = Idle }, Cmd.none )
+            case interaction of
+                SelectingRectangle { start, end, mode } ->
+                    let
+                        selectedObjects =
+                            diagram |> getObjectsWithinRectangle start end
+
+                        newSelection =
+                            case mode of
+                                SetSelection ->
+                                    Selection.fromObjectsAndMorphisms selectedObjects []
+
+                                AddToSelection ->
+                                    selection |> Selection.addObjects selectedObjects
+                    in
+                        ( { model
+                            | selection = newSelection
+                            , interaction = Idle
+                          }
+                        , Cmd.none
+                        )
+
+                _ ->
+                    ( { model | interaction = Idle }, Cmd.none )
 
         GraphViewMsg graphViewMsg ->
             GraphView.update graphViewConfig graphViewMsg model
@@ -177,7 +211,7 @@ graphViewConfig =
                     ( OnNode id, True ) ->
                         SelectObject id AddToSelection
         , GraphView.onDragStart <|
-            \{ target, modifiers } ->
+            \{ target, modifiers, position } ->
                 case ( target, Mouse.hasShift modifiers ) of
                     ( OnNode id, False ) ->
                         StartMovingObjects id
@@ -185,8 +219,11 @@ graphViewConfig =
                     ( OnNode id, True ) ->
                         StartCreatingMorphismFrom id
 
-                    ( OnBackground, _ ) ->
-                        NoOp
+                    ( OnBackground, False ) ->
+                        StartSelectingRectangle position SetSelection
+
+                    ( OnBackground, True ) ->
+                        StartSelectingRectangle position AddToSelection
         , GraphView.onDragBy DragBy
         , GraphView.onDragEnd DragEnd
         ]

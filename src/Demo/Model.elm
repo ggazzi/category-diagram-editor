@@ -1,4 +1,11 @@
-module Demo.Model exposing (Model, InteractionState(..), findUniqueId)
+module Demo.Model
+    exposing
+        ( Model
+        , InteractionState(..)
+        , SelectionMode(..)
+        , findUniqueId
+        , getObjectsWithinRectangle
+        )
 
 import Diagram exposing (Diagram, ObjectId)
 import Diagram.Selection exposing (Selection)
@@ -19,6 +26,12 @@ type InteractionState
     = Idle
     | MovingObjects (List ObjectId)
     | CreatingMorphismFrom ObjectId Position
+    | SelectingRectangle { start : Position, end : Position, mode : SelectionMode }
+
+
+type SelectionMode
+    = SetSelection
+    | AddToSelection
 
 
 findUniqueId : Model -> ObjectId
@@ -31,3 +44,27 @@ findUniqueId { uid, diagram } =
                 candidate
     in
         find uid
+
+
+getObjectsWithinRectangle : Position -> Position -> Diagram -> List ObjectId
+getObjectsWithinRectangle start end =
+    let
+        ( left, right ) =
+            if start.x < end.x then
+                ( start.x, end.x )
+            else
+                ( end.x, start.x )
+
+        ( top, bottom ) =
+            if start.y < end.y then
+                ( start.y, end.y )
+            else
+                ( end.y, start.y )
+
+        isWithinRectangle ( id, { x, y } ) =
+            if left <= x && x <= right && top <= y && y <= bottom then
+                Just id
+            else
+                Nothing
+    in
+        Diagram.objectsWithIds >> List.filterMap isWithinRectangle
