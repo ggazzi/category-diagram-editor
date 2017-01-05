@@ -3,7 +3,8 @@ module Main exposing (..)
 import Demo.Model exposing (..)
 import Demo.Update exposing (..)
 import Demo.View exposing (..)
-import Diagram exposing (Diagram, Object, ObjectId, Morphism)
+import Diagram exposing (Diagram, Object, Morphism)
+import Diagram.Selection as Selection
 import GraphView exposing (Shape(..), Target(..))
 import Html exposing (Html, div, ul, li, text)
 
@@ -26,6 +27,7 @@ init : ( Model, Cmd Msg )
 init =
     ( { diagram = singleMorphism
       , uid = 0
+      , selection = Selection.empty
       , interaction = Idle
       , graphView = GraphView.init
       }

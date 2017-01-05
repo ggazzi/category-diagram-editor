@@ -47,6 +47,7 @@ type alias Node =
     , x : Float
     , y : Float
     , shape : Shape
+    , selected : Bool
     }
 
 
@@ -272,7 +273,7 @@ background envelope config =
 
 
 nodeView : (InternalMsg -> msg) -> Config msg -> Node -> Svg msg
-nodeView envelope config { id, name, x, y, shape } =
+nodeView envelope config { id, name, x, y, shape, selected } =
     let
         nodeWrapper =
             Svg.g
@@ -291,7 +292,10 @@ nodeView envelope config { id, name, x, y, shape } =
                 Circle radius ->
                     [ Svg.circle
                         [ Attr.r (toString radius)
-                        , Attr.fill "white"
+                        , if selected then
+                            Attr.fill "lightgrey"
+                          else
+                            Attr.fill "white"
                         , Attr.stroke "lightgrey"
                         , Attr.strokeWidth "1"
                         ]

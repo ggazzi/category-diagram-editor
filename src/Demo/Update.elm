@@ -8,6 +8,7 @@ module Demo.Update
 
 import Demo.Model exposing (..)
 import Diagram exposing (Diagram, ObjectId)
+import Diagram.Selection as Selection
 import GraphView exposing (Target(..))
 import Json.Decode
 import Mouse.Modifiers as Mouse
@@ -20,6 +21,9 @@ import Position exposing (Position, Delta, moveBy)
 type Msg
     = NoOp
     | SetDiagram Diagram
+      -- Selection of objects
+    | ClearSelection
+    | SelectObject ObjectId SelectionMode
       -- Creation of objects/morphisms
     | CreateObjectAt Position
     | StartCreatingMorphismFrom ObjectId
@@ -31,14 +35,41 @@ type Msg
     | GraphViewMsg GraphView.InternalMsg
 
 
+type SelectionMode
+    = SetSelection
+    | AddToSelection
+
+
 update : Msg -> Model -> ( Model, Cmd Msg )
-update msg ({ diagram, interaction } as model) =
+update msg ({ diagram, interaction, selection } as model) =
     case msg of
         NoOp ->
             ( model, Cmd.none )
 
         SetDiagram newDiagram ->
             ( { model | diagram = newDiagram }, Cmd.none )
+
+        -- Selection of objects
+        ClearSelection ->
+            ( { model | selection = Selection.empty }, Cmd.none )
+
+        SelectObject objectId mode ->
+            case mode of
+                SetSelection ->
+                    let
+                        theObject =
+                            Selection.singleObject objectId
+                    in
+                        if selection == theObject then
+                            ( { model | selection = Selection.empty }, Cmd.none )
+                        else
+                            ( { model | selection = theObject }, Cmd.none )
+
+                AddToSelection ->
+                    if selection |> Selection.hasObject objectId then
+                        ( { model | selection = selection |> Selection.removeObject objectId }, Cmd.none )
+                    else
+                        ( { model | selection = selection |> Selection.addObject objectId }, Cmd.none )
 
         -- Creation of objects/morphisms
         CreateObjectAt { x, y } ->
@@ -128,11 +159,17 @@ graphViewConfig =
         , GraphView.onClick <|
             \{ target, modifiers, position } ->
                 case ( target, Mouse.hasShift modifiers ) of
+                    ( OnBackground, False ) ->
+                        ClearSelection
+
                     ( OnBackground, True ) ->
                         CreateObjectAt position
 
-                    _ ->
-                        NoOp
+                    ( OnNode id, False ) ->
+                        SelectObject id SetSelection
+
+                    ( OnNode id, True ) ->
+                        SelectObject id AddToSelection
         , GraphView.onDragStart <|
             \{ target, modifiers } ->
                 case ( target, Mouse.hasShift modifiers ) of

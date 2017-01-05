@@ -1,6 +1,7 @@
 module Demo.Model exposing (Model, InteractionState(..), findUniqueId)
 
 import Diagram exposing (Diagram, ObjectId)
+import Diagram.Selection exposing (Selection)
 import GraphView
 import Position exposing (Position)
 
@@ -8,6 +9,7 @@ import Position exposing (Position)
 type alias Model =
     { diagram : Diagram
     , uid : Int
+    , selection : Selection
     , interaction : InteractionState
     , graphView : GraphView.State
     }

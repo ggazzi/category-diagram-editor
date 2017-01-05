@@ -3,6 +3,7 @@ module Demo.View exposing (view)
 import Demo.Model exposing (..)
 import Demo.Update exposing (..)
 import Diagram exposing (Diagram)
+import Diagram.Selection as Selection exposing (Selection)
 import GraphView exposing (Shape(..))
 import Html exposing (Html, h1, h2, div, ul, li, p, text, textarea)
 import Html.Attributes as Html exposing (style)
@@ -12,7 +13,7 @@ import Json.Decode
 
 
 view : Model -> Html Msg
-view ({ diagram } as model) =
+view ({ diagram, selection } as model) =
     div
         [ style
             [ ( "max-width", "60em" )
@@ -24,7 +25,7 @@ view ({ diagram } as model) =
         , GraphView.view
             GraphViewMsg
             graphViewConfig
-            (objectsAsNodes diagram)
+            (objectsAsNodes diagram selection)
             (morphismsAsEdges diagram ++ morphismBeingCreated model)
         , textView diagram
         ]
@@ -73,16 +74,18 @@ textView diagram =
             ]
 
 
-objectsAsNodes : Diagram -> List GraphView.Node
-objectsAsNodes =
-    Diagram.objectsWithIds
-        >> List.map
+objectsAsNodes : Diagram -> Selection -> List GraphView.Node
+objectsAsNodes diagram selection =
+    diagram
+        |> Diagram.objectsWithIds
+        |> List.map
             (\( id, { x, y, name } ) ->
                 { id = id
                 , name = name
                 , x = x
                 , y = y
                 , shape = nodeShape
+                , selected = selection |> Selection.hasObject id
                 }
             )
 
