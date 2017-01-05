@@ -47,6 +47,9 @@ instructions =
             [ section "Selection"
                 [ "Click to select a single object"
                 , "Shift+click to add an object to the selection"
+                , "Drag on the background to select multiple objects within a rectangle"
+                , "Shift+drag on the background to add multiple objects to the selection"
+                , "Click the background to clear the selection"
                 ]
             , section "Moving Objects"
                 [ "Drag objects to move them"
