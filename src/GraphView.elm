@@ -23,8 +23,8 @@ module GraphView
         , view
         )
 
-import Draggable.CustomInfo as Draggable exposing (Delta)
-import Draggable.CustomInfo.Events as Draggable
+import Draggable as Draggable exposing (Delta)
+import Draggable.Events as Draggable
 import Html exposing (Html)
 import Html.Attributes exposing (style)
 import Json.Decode as Json
@@ -94,14 +94,23 @@ type Target
 {-| Internal state of the graph view.
 -}
 type alias State =
-    { drag : Draggable.State (Mouse.State Target) }
+    { interaction : InteractionState
+    , drag : Draggable.State
+    }
+
+
+type InteractionState
+    = Idle
+    | AwaitingInteraction (Mouse.State Target)
 
 
 {-| Initial state for the graph view.
 -}
 init : State
 init =
-    { drag = Draggable.init }
+    { interaction = Idle
+    , drag = Draggable.init
+    }
 
 
 
@@ -177,12 +186,13 @@ onMouseUp envelope =
 {-| A message type to update the graph view.
 -}
 type Msg
-    = OnClick (Mouse.State Target)
-    | OnDragStart (Mouse.State Target)
+    = OnClick
+    | OnDragStart
     | OnDragBy Delta
     | OnDragEnd
     | OnMouseUp Target
-    | DragMsg (Draggable.Msg (Mouse.State Target))
+    | DragMsgWithMouseState Draggable.Msg (Mouse.State Target)
+    | DragMsg Draggable.Msg
 
 
 {-|
@@ -198,45 +208,65 @@ type Output msg
 {-| Handle internal update messages for the view model.
 -}
 update : (Msg -> msg) -> UpdateConfig msg -> Msg -> State -> ( State, Output msg )
-update envelope (UpdateConfig config) msg model =
-    let
-        asOutput maybeMsg =
-            case maybeMsg of
-                Just msg ->
-                    OutMsg msg
+update envelope (UpdateConfig config) msg ({ interaction } as model) =
+    case msg of
+        OnClick ->
+            case interaction of
+                AwaitingInteraction mouseState ->
+                    ( model, asOutput <| config.onClick mouseState )
 
-                Nothing ->
-                    NoOutput
-    in
-        case msg of
-            OnClick info ->
-                ( model, asOutput <| config.onClick info )
+                Idle ->
+                    ( model, NoOutput )
 
-            OnDragStart info ->
-                ( model, asOutput <| config.onDragStart info )
+        OnDragStart ->
+            case interaction of
+                AwaitingInteraction mouseState ->
+                    ( model, asOutput <| config.onDragStart mouseState )
 
-            OnDragBy delta ->
-                ( model, asOutput <| config.onDragBy delta )
+                Idle ->
+                    ( model, NoOutput )
 
-            OnDragEnd ->
-                ( model, asOutput <| config.onDragEnd )
+        OnDragBy delta ->
+            ( model, asOutput <| config.onDragBy delta )
 
-            OnMouseUp target ->
-                ( model, asOutput <| config.onMouseUp target )
+        OnDragEnd ->
+            ( model, asOutput <| config.onDragEnd )
 
-            DragMsg dragMsg ->
-                let
-                    ( newModel, cmd ) =
-                        Draggable.update draggableConfig dragMsg model
-                in
-                    ( newModel, OutCmd <| Cmd.map envelope cmd )
+        OnMouseUp target ->
+            ( model, asOutput <| config.onMouseUp target )
+
+        DragMsgWithMouseState dragMsg mouseState ->
+            let
+                ( newModel, cmd ) =
+                    Draggable.update draggableConfig dragMsg model
+            in
+                ( { newModel | interaction = AwaitingInteraction mouseState }
+                , OutCmd <| Cmd.map envelope cmd
+                )
+
+        DragMsg dragMsg ->
+            let
+                ( newModel, cmd ) =
+                    Draggable.update draggableConfig dragMsg model
+            in
+                ( newModel, OutCmd <| Cmd.map envelope cmd )
 
 
-draggableConfig : Draggable.Config (Mouse.State Target) Msg
+asOutput : Maybe msg -> Output msg
+asOutput maybeMsg =
+    case maybeMsg of
+        Just msg ->
+            OutMsg msg
+
+        Nothing ->
+            NoOutput
+
+
+draggableConfig : Draggable.Config Msg
 draggableConfig =
     Draggable.customConfig
-        [ Draggable.onClick OnClick
-        , Draggable.onDragStart OnDragStart
+        [ Draggable.onClick (\_ -> OnClick)
+        , Draggable.onDragStart (\_ -> OnDragStart)
         , Draggable.onDragBy OnDragBy
         , Draggable.onDragEnd OnDragEnd
         ]
@@ -425,8 +455,10 @@ targetDisplacement { shape } =
 
 handlerAttributes : (Msg -> msg) -> Target -> List (Svg.Attribute msg)
 handlerAttributes envelope target =
-    Draggable.mouseTrigger (envelope << DragMsg) (Mouse.state <| target)
-        :: [ Svg.on "mouseup" (Json.succeed <| envelope <| OnMouseUp target) ]
+    [ Draggable.customMouseTrigger (Mouse.state target)
+        (\dragMsg mouseState -> envelope <| DragMsgWithMouseState dragMsg mouseState)
+    , Svg.on "mouseup" (Json.succeed <| envelope <| OnMouseUp target)
+    ]
 
 
 type alias Marker a =
