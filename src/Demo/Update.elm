@@ -3,14 +3,12 @@ module Demo.Update
         ( Msg(..)
         , update
         , subscriptions
-        , graphViewConfig
         )
 
 import Demo.Model exposing (..)
 import Diagram exposing (Diagram, ObjectId)
 import Diagram.Selection as Selection
-import GraphView exposing (Target(..))
-import Json.Decode
+import GraphView exposing (Target(..), Output(..))
 import Mouse.Modifiers as Mouse
 import Position exposing (Position, Delta, moveBy)
 
@@ -34,7 +32,7 @@ type Msg
       -- Drag-related events
     | DragBy Delta
     | DragEnd
-    | GraphViewMsg GraphView.InternalMsg
+    | GraphViewMsg GraphView.Msg
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -182,12 +180,27 @@ update msg ({ diagram, interaction, selection } as model) =
                     ( { model | interaction = Idle }, Cmd.none )
 
         GraphViewMsg graphViewMsg ->
-            GraphView.update graphViewConfig graphViewMsg model
+            let
+                ( newGraphViewModel, output ) =
+                    GraphView.update GraphViewMsg graphViewConfig graphViewMsg model.graphView
+
+                newModel =
+                    { model | graphView = newGraphViewModel }
+            in
+                case output of
+                    OutCmd cmd ->
+                        ( newModel, cmd )
+
+                    OutMsg msg ->
+                        update msg newModel
+
+                    NoOutput ->
+                        ( newModel, Cmd.none )
 
 
-graphViewConfig : GraphView.Config Msg
+graphViewConfig : GraphView.UpdateConfig Msg
 graphViewConfig =
-    GraphView.customConfig
+    GraphView.updateConfig
         [ GraphView.onMouseUp <|
             \target ->
                 case target of
@@ -195,37 +208,37 @@ graphViewConfig =
                         Nothing
 
                     OnNode id ->
-                        Just (Json.Decode.succeed (CreateMorphismTo id))
+                        Just (CreateMorphismTo id)
         , GraphView.onClick <|
             \{ target, modifiers, position } ->
                 case ( target, Mouse.hasShift modifiers ) of
                     ( OnBackground, False ) ->
-                        ClearSelection
+                        Just (ClearSelection)
 
                     ( OnBackground, True ) ->
-                        CreateObjectAt position
+                        Just (CreateObjectAt position)
 
                     ( OnNode id, False ) ->
-                        SelectObject id SetSelection
+                        Just (SelectObject id SetSelection)
 
                     ( OnNode id, True ) ->
-                        SelectObject id AddToSelection
+                        Just (SelectObject id AddToSelection)
         , GraphView.onDragStart <|
             \{ target, modifiers, position } ->
                 case ( target, Mouse.hasShift modifiers ) of
                     ( OnNode id, False ) ->
-                        StartMovingObjects id
+                        Just (StartMovingObjects id)
 
                     ( OnNode id, True ) ->
-                        StartCreatingMorphismFrom id
+                        Just (StartCreatingMorphismFrom id)
 
                     ( OnBackground, False ) ->
-                        StartSelectingRectangle position SetSelection
+                        Just (StartSelectingRectangle position SetSelection)
 
                     ( OnBackground, True ) ->
-                        StartSelectingRectangle position AddToSelection
-        , GraphView.onDragBy DragBy
-        , GraphView.onDragEnd DragEnd
+                        Just (StartSelectingRectangle position AddToSelection)
+        , GraphView.onDragBy (Just << DragBy)
+        , GraphView.onDragEnd (Just DragEnd)
         ]
 
 

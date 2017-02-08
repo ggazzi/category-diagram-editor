@@ -27,7 +27,6 @@ view ({ diagram, selection, interaction } as model) =
         , instructions
         , GraphView.view
             GraphViewMsg
-            graphViewConfig
             (objectsAsNodes diagram selection)
             (morphismsAsEdges diagram ++ morphismBeingCreated model)
             [ selectionRectangle interaction ]
