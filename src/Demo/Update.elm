@@ -201,7 +201,7 @@ update msg ({ diagram, interaction, selection } as model) =
 graphViewConfig : GraphView.UpdateConfig Msg
 graphViewConfig =
     GraphView.updateConfig
-        [ GraphView.onMouseUp <|
+        { onMouseUp =
             \target ->
                 case target of
                     OnBackground ->
@@ -209,7 +209,7 @@ graphViewConfig =
 
                     OnNode id ->
                         Just (CreateMorphismTo id)
-        , GraphView.onClick <|
+        , onClick =
             \{ target, modifiers, position } ->
                 case ( target, Mouse.hasShift modifiers ) of
                     ( OnBackground, False ) ->
@@ -223,7 +223,7 @@ graphViewConfig =
 
                     ( OnNode id, True ) ->
                         Just (SelectObject id AddToSelection)
-        , GraphView.onDragStart <|
+        , onDragStart =
             \{ target, modifiers, position } ->
                 case ( target, Mouse.hasShift modifiers ) of
                     ( OnNode id, False ) ->
@@ -237,9 +237,9 @@ graphViewConfig =
 
                     ( OnBackground, True ) ->
                         Just (StartSelectingRectangle position AddToSelection)
-        , GraphView.onDragBy (Just << DragBy)
-        , GraphView.onDragEnd (Just DragEnd)
-        ]
+        , onDragBy = Just << DragBy
+        , onDragEnd = Just DragEnd
+        }
 
 
 

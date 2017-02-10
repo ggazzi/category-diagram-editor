@@ -1,27 +1,36 @@
 module GraphView
     exposing
-        ( Node
-        , NodeId
-        , Edge
-        , Endpoint
-        , Shape(..)
-        , State
-        , init
-        , UpdateConfig
-        , Event
-        , Target(..)
-        , updateConfig
-        , onClick
-        , onDragStart
-        , onDragEnd
-        , onDragBy
-        , onMouseUp
+        ( State
         , Msg
-        , Output(..)
+        , init
         , update
         , subscriptions
         , view
+          -- Configuration of Events
+        , UpdateConfig
+        , Target(..)
+        , updateConfig
+          -- Configuration of the View
+        , ViewConfig
+        , viewConfig
+        , Node
+        , Edge
+        , Endpoint
+        , Shape(..)
+        , Output(..)
         )
+
+{-|
+This module provides utilities for displaying graphs.
+
+@docs State, Msg, init, update, subscriptions, view
+
+# Configuration of Events
+@docs UpdateConfig, Target, updateConfig
+
+# Configuration of the View
+@docs ViewConfig, viewConfig, Node, Edge, Endpoint, Shape, Output
+-}
 
 import Draggable as Draggable exposing (Delta)
 import Draggable.Events as Draggable
@@ -33,72 +42,26 @@ import Position exposing (Position)
 import Svg exposing (Svg)
 import Svg.Attributes as Attr
 import Svg.Events as Svg
+import Svg.Lazy as Svg
 import Svg.Keyed
-
-
--- VIEW MODEL
-
-
-{-| Type containing graphical information about a node.
--}
-type alias Node =
-    { id : NodeId
-    , name : String
-    , x : Float
-    , y : Float
-    , shape : Shape
-    , selected : Bool
-    }
-
-
-{-| Type used to identify nodes.
--}
-type alias NodeId =
-    Int
-
-
-{-| Type containing graphical information about an edge.
--}
-type alias Edge =
-    { source : Endpoint
-    , target : Endpoint
-    }
-
-
-{-| Type containing graphical information about an edge's endpoint, which may not be an actual node.
--}
-type alias Endpoint =
-    { key : Maybe Int
-    , x : Float
-    , y : Float
-    , shape : Shape
-    }
-
-
-type Shape
-    = None
-    | Circle Float
-
-
-{-| Type representing possible targets of interaction.
--}
-type Target
-    = OnBackground
-    | OnNode NodeId
-
 
 
 -- MODEL
 
 
-{-| Internal state of the graph view.
+{-| Opaque type representing the internal state of the graph view.
 -}
-type alias State =
-    { interaction : InteractionState
-    , drag : Draggable.State ()
-    }
+type State
+    = State
+        { interaction : InteractionState
+        , drag : Draggable.State ()
+        }
 
 
+{-|
+Temporarily stores the mouse state when the user has pressed a mouse button, but neither a
+click nor a drag were identified yet.
+-}
 type InteractionState
     = Idle
     | AwaitingInteraction (Mouse.State Target)
@@ -108,75 +71,10 @@ type InteractionState
 -}
 init : State
 init =
-    { interaction = Idle
-    , drag = Draggable.init
-    }
-
-
-
--- CONFIG
-
-
-{-| Configuration for the @update@ function of the graph view. This describes the messages that will be output by the component, to the parent application, for different events from the view.
--}
-type UpdateConfig msg
-    = UpdateConfig
-        { onClick : Mouse.State Target -> Maybe msg
-        , onDragStart : Mouse.State Target -> Maybe msg
-        , onDragBy : Delta -> Maybe msg
-        , onDragEnd : Maybe msg
-        , onMouseUp : Target -> Maybe msg
+    State
+        { interaction = Idle
+        , drag = Draggable.init
         }
-
-
-type Event msg
-    = Event (UpdateConfig msg -> UpdateConfig msg)
-
-
-emptyConfig : UpdateConfig msg
-emptyConfig =
-    UpdateConfig
-        { onClick = \_ -> Nothing
-        , onDragStart = \_ -> Nothing
-        , onDragBy = \_ -> Nothing
-        , onDragEnd = Nothing
-        , onMouseUp = \_ -> Nothing
-        }
-
-
-updateConfig : List (Event msg) -> UpdateConfig msg
-updateConfig events =
-    let
-        applyAllTo initial =
-            List.foldl (\(Event f) acc -> f acc) initial
-    in
-        events
-            |> applyAllTo emptyConfig
-
-
-onClick : (Mouse.State Target -> Maybe msg) -> Event msg
-onClick envelope =
-    Event <| \(UpdateConfig config) -> UpdateConfig { config | onClick = envelope }
-
-
-onDragStart : (Mouse.State Target -> Maybe msg) -> Event msg
-onDragStart envelope =
-    Event <| \(UpdateConfig config) -> UpdateConfig { config | onDragStart = envelope }
-
-
-onDragBy : (Delta -> Maybe msg) -> Event msg
-onDragBy envelope =
-    Event <| \(UpdateConfig config) -> UpdateConfig { config | onDragBy = envelope }
-
-
-onDragEnd : Maybe msg -> Event msg
-onDragEnd message =
-    Event <| \(UpdateConfig config) -> UpdateConfig { config | onDragEnd = message }
-
-
-onMouseUp : (Target -> Maybe msg) -> Event msg
-onMouseUp envelope =
-    Event <| \(UpdateConfig config) -> UpdateConfig { config | onMouseUp = envelope }
 
 
 
@@ -205,42 +103,47 @@ type Output msg
     | NoOutput
 
 
-{-| Handle internal update messages for the view model.
+{-|
+Handle internal update messages for the view model, returning the updated state and one of the
+following:
+  * A command that should be sent to the environment
+  * A message that should be handled by the containing module
+  * No output
 -}
 update : (Msg -> msg) -> UpdateConfig msg -> Msg -> State -> ( State, Output msg )
-update envelope (UpdateConfig config) msg ({ interaction } as model) =
+update envelope (UpdateConfig config) msg (State ({ interaction } as model)) =
     case msg of
         OnClick ->
             case interaction of
                 AwaitingInteraction mouseState ->
-                    ( model, asOutput <| config.onClick mouseState )
+                    ( State model, asOutput <| config.onClick mouseState )
 
                 Idle ->
-                    ( model, NoOutput )
+                    ( State model, NoOutput )
 
         OnDragStart ->
             case interaction of
                 AwaitingInteraction mouseState ->
-                    ( model, asOutput <| config.onDragStart mouseState )
+                    ( State model, asOutput <| config.onDragStart mouseState )
 
                 Idle ->
-                    ( model, NoOutput )
+                    ( State model, NoOutput )
 
         OnDragBy delta ->
-            ( model, asOutput <| config.onDragBy delta )
+            ( State model, asOutput <| config.onDragBy delta )
 
         OnDragEnd ->
-            ( model, asOutput <| config.onDragEnd )
+            ( State model, asOutput <| config.onDragEnd )
 
         OnMouseUp target ->
-            ( model, asOutput <| config.onMouseUp target )
+            ( State model, asOutput <| config.onMouseUp target )
 
         DragMsgWithMouseState dragMsg mouseState ->
             let
                 ( newModel, cmd ) =
                     Draggable.update draggableConfig dragMsg model
             in
-                ( { newModel | interaction = AwaitingInteraction mouseState }
+                ( State { newModel | interaction = AwaitingInteraction mouseState }
                 , OutCmd <| Cmd.map envelope cmd
                 )
 
@@ -249,7 +152,7 @@ update envelope (UpdateConfig config) msg ({ interaction } as model) =
                 ( newModel, cmd ) =
                     Draggable.update draggableConfig dragMsg model
             in
-                ( newModel, OutCmd <| Cmd.map envelope cmd )
+                ( State newModel, OutCmd <| Cmd.map envelope cmd )
 
 
 asOutput : Maybe msg -> Output msg
@@ -273,14 +176,118 @@ draggableConfig =
 
 
 
+-- UPDATE CONFIG
+
+
+{-|
+Configuration for the `update` function of the graph view. This describes the messages that will be
+output by the component, to the parent application, for different events from the view.
+-}
+type UpdateConfig msg
+    = UpdateConfig
+        { onClick : Mouse.State Target -> Maybe msg
+        , onDragStart : Mouse.State Target -> Maybe msg
+        , onDragBy : Delta -> Maybe msg
+        , onDragEnd : Maybe msg
+        , onMouseUp : Target -> Maybe msg
+        }
+
+
+{-| Type representing possible targets of interaction.
+-}
+type Target
+    = OnBackground
+    | OnNode Int
+
+
+{-| Create a configuration for the update function, handling the given events.
+-}
+updateConfig :
+    { onClick : Mouse.State Target -> Maybe msg
+    , onDragStart : Mouse.State Target -> Maybe msg
+    , onDragBy : Delta -> Maybe msg
+    , onDragEnd : Maybe msg
+    , onMouseUp : Target -> Maybe msg
+    }
+    -> UpdateConfig msg
+updateConfig =
+    UpdateConfig
+
+
+
 -- SUBSCRIPTIONS
 
 
 {-| Create mouse subscriptions used for dragging.
 -}
 subscriptions : (Msg -> msg) -> State -> Sub msg
-subscriptions envelope { drag } =
+subscriptions envelope (State { drag }) =
     Draggable.subscriptions (envelope << DragMsg) drag
+
+
+
+-- VIEW CONFIG
+
+
+{-| Type for configuring how nodes and edges are identified and displayed.
+-}
+type ViewConfig msg node edge
+    = ViewConfig
+        { asMsg : Msg -> msg
+        , asNode : node -> Node
+        , nodeId : node -> Int
+        , asEdge : edge -> Edge
+        , edgeKey : edge -> String
+        }
+
+
+{-| Configure how nodes and edges should be identified and displayed.
+-}
+viewConfig :
+    { asMsg : Msg -> msg
+    , asNode : node -> Node
+    , nodeId : node -> Int
+    , asEdge : edge -> Edge
+    , edgeKey : edge -> String
+    }
+    -> ViewConfig msg node edge
+viewConfig =
+    ViewConfig
+
+
+{-| Description of how a node should be displayed.
+-}
+type alias Node =
+    { name : String
+    , x : Float
+    , y : Float
+    , shape : Shape
+    , selected : Bool
+    }
+
+
+{-| Description of how an edge should be displayed.
+-}
+type alias Edge =
+    { source : Endpoint
+    , target : Endpoint
+    }
+
+
+{-| Description of edge endpoints, which influence how an edge is displayed.
+-}
+type alias Endpoint =
+    { x : Float
+    , y : Float
+    , shape : Shape
+    }
+
+
+{-| Possible shapes for nodes.
+-}
+type Shape
+    = None
+    | Circle Float
 
 
 
@@ -288,38 +295,44 @@ subscriptions envelope { drag } =
 
 
 {-|
-Create a graph view. The first argument wraps internal messagens into an envelope for the outer application. The `Config` argument describes the messages generated by the view events. The `List Node` and `List Edge` arguments provide the graph to be displayed. The `List (Svg msg)` argument provides elements that should be displayed alongside the nodes and edges.
+Create a graph view. The `ViewConfig` argument describes how the nodes and edges will be identified and displayed. The `List node` and `List edge` arguments provide the graph to be displayed. The `List (Svg msg)` argument provides additional elements that should be displayed alongside the nodes and edges.
 
-  __Note:__ The `List Node`, `List Edge` and `List (Svg msg)` arguments should be computed with information from the model, but generally not stored in it. The `Config` is view or update code and should generally be kept separate from the model.
+  __Note:__ The `List Node`, `List Edge` and `List (Svg msg)` arguments should be computed with information from the model, but generally not stored in it. The `ViewConfig` is view code and should _always_ be kept separate from the model.
 -}
-view : (Msg -> msg) -> List Node -> List Edge -> List (Svg msg) -> Html msg
-view envelope nodes edges children =
-    Svg.svg
-        [ style
-            [ ( "margin", "20px" )
-            , ( "width", "800px" )
-            , ( "height", "600px" )
+view : ViewConfig msg node edge -> List node -> List edge -> List (Svg msg) -> Html msg
+view ((ViewConfig { nodeId, edgeKey }) as config) nodes edges additionalElements =
+    let
+        showNode =
+            \node -> ( toString <| nodeId node, nodeView config node )
+
+        showEdge =
+            \edge -> ( edgeKey edge, edgeView config edge )
+    in
+        Svg.svg
+            [ style
+                [ ( "margin", "20px" )
+                , ( "width", "800px" )
+                , ( "height", "600px" )
+                ]
             ]
-        ]
-        ([ Svg.defs [] [ arrowhead.svg ]
-         , background envelope
-         , edges
-            |> List.map (\e -> ( toString <| edgeKey e, edgeView e ))
-            |> Svg.Keyed.node "g"
+            ([ Svg.defs [] [ arrowhead.svg ]
+             , background config
+             , Svg.Keyed.node "g"
                 [ Attr.class "edges-view"
                 , Attr.stroke "black"
                 , Attr.cursor "pointer"
                 ]
-         , nodes
-            |> List.map (\node -> ( toString node.id, nodeView envelope node ))
-            |> Svg.Keyed.node "g" [ Attr.class "nodes-view" ]
-         ]
-            ++ children
-        )
+                (List.map showEdge edges)
+             , Svg.Keyed.node "g"
+                [ Attr.class "nodes-view" ]
+                (List.map showNode nodes)
+             ]
+                ++ additionalElements
+            )
 
 
-background : (Msg -> msg) -> Svg msg
-background envelope =
+background : ViewConfig msg node edge -> Svg msg
+background (ViewConfig { asMsg }) =
     Svg.rect
         ([ Attr.width "100%"
          , Attr.height "100%"
@@ -330,7 +343,7 @@ background envelope =
          , Attr.ry "5px"
          , Attr.cursor "crosshair"
          ]
-            ++ handlerAttributes envelope OnBackground
+            ++ handlerAttributes asMsg OnBackground
         )
         []
 
@@ -339,16 +352,19 @@ background envelope =
 -- NODES
 
 
-nodeView : (Msg -> msg) -> Node -> Svg msg
-nodeView envelope { id, name, x, y, shape, selected } =
+nodeView : ViewConfig msg node edge -> node -> Svg msg
+nodeView (ViewConfig { asMsg, asNode, nodeId }) value =
     let
+        { name, x, y, shape, selected } =
+            asNode value
+
         nodeWrapper =
             Svg.g
                 ([ Attr.class "node"
                  , Attr.transform translate
                  , Attr.cursor "pointer"
                  ]
-                    ++ handlerAttributes envelope (OnNode id)
+                    ++ handlerAttributes asMsg (OnNode <| nodeId value)
                 )
 
         translate =
@@ -383,14 +399,12 @@ nodeView envelope { id, name, x, y, shape, selected } =
 -- EDGES
 
 
-edgeKey : { e | source : { b | key : a }, target : { d | key : c } } -> String
-edgeKey { source, target } =
-    toString ( source.key, target.key )
-
-
-edgeView : Edge -> Svg msg
-edgeView edge =
+edgeView : ViewConfig msg node edge -> edge -> Svg msg
+edgeView (ViewConfig { asEdge }) value =
     let
+        edge =
+            asEdge value
+
         { source, target, length } =
             adjustEndpoints edge
     in

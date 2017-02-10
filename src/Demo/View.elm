@@ -2,7 +2,7 @@ module Demo.View exposing (view)
 
 import Demo.Model exposing (..)
 import Demo.Update exposing (..)
-import Diagram exposing (Diagram)
+import Diagram exposing (Diagram, Object, ObjectId, Morphism)
 import Diagram.Selection as Selection exposing (Selection)
 import GraphView exposing (Shape(..))
 import Html exposing (Html, h1, h2, div, ul, li, p, text, textarea)
@@ -26,9 +26,11 @@ view ({ diagram, selection, interaction } as model) =
         [ h1 [] [ text "Categorial Diagram Editor" ]
         , instructions
         , GraphView.view
-            GraphViewMsg
-            (objectsAsNodes diagram selection)
-            (morphismsAsEdges diagram ++ morphismBeingCreated model)
+            (graphViewConfig selection)
+            (Diagram.objectsWithIds diagram)
+            (morphismBeingCreated model
+                ++ List.map ActualMorphism (Diagram.morphismsWithIds diagram)
+            )
             [ selectionRectangle interaction ]
         , textView diagram
         ]
@@ -93,6 +95,73 @@ textView diagram =
             ]
 
 
+morphismBeingCreated : Model -> List ViewEdge
+morphismBeingCreated { interaction, diagram } =
+    case interaction of
+        CreatingMorphismFrom domainId mousePos ->
+            case diagram |> Diagram.getObject domainId of
+                Just domain ->
+                    [ VirtualMorphism domain mousePos "morphismBeingCreated" ]
+
+                Nothing ->
+                    []
+
+        _ ->
+            []
+
+
+
+-- GRAPH VIEW CONFIG
+
+
+type ViewEdge
+    = ActualMorphism ( Object, ( ObjectId, ObjectId ), Morphism, Object )
+    | VirtualMorphism Object Position String
+
+
+graphViewConfig :
+    Selection
+    -> GraphView.ViewConfig Msg ( ObjectId, { a | name : String, x : Float, y : Float } ) ViewEdge
+graphViewConfig selection =
+    GraphView.viewConfig
+        { asMsg = GraphViewMsg
+        , asNode =
+            \( id, { x, y, name } ) ->
+                { name = name
+                , x = x
+                , y = y
+                , shape = nodeShape
+                , selected = selection |> Selection.hasObject id
+                }
+        , nodeId = \( id, _ ) -> id
+        , asEdge =
+            \morphism ->
+                case morphism of
+                    ActualMorphism ( dom, ( domId, codId ), _, cod ) ->
+                        { source = { x = dom.x, y = dom.y, shape = nodeShape }
+                        , target = { x = cod.x, y = cod.y, shape = nodeShape }
+                        }
+
+                    VirtualMorphism dom position _ ->
+                        { source = { x = dom.x, y = dom.y, shape = nodeShape }
+                        , target = { x = position.x, y = position.y, shape = None }
+                        }
+        , edgeKey =
+            \morphism ->
+                case morphism of
+                    ActualMorphism ( _, domainAndCodomainIds, _, _ ) ->
+                        toString domainAndCodomainIds
+
+                    VirtualMorphism _ _ key ->
+                        key
+        }
+
+
+nodeShape : Shape
+nodeShape =
+    Circle 15
+
+
 selectionRectangle : InteractionState -> Svg msg
 selectionRectangle interaction =
     case interaction of
@@ -112,56 +181,6 @@ selectionRectangle interaction =
 
         _ ->
             Svg.g [] []
-
-
-objectsAsNodes : Diagram -> Selection -> List GraphView.Node
-objectsAsNodes diagram selection =
-    diagram
-        |> Diagram.objectsWithIds
-        |> List.map
-            (\( id, { x, y, name } ) ->
-                { id = id
-                , name = name
-                , x = x
-                , y = y
-                , shape = nodeShape
-                , selected = selection |> Selection.hasObject id
-                }
-            )
-
-
-morphismsAsEdges : Diagram -> List GraphView.Edge
-morphismsAsEdges =
-    Diagram.morphismsWithIds
-        >> List.map
-            (\( dom, ( domId, codId ), _, cod ) ->
-                { source = { x = dom.x, y = dom.y, key = Just domId, shape = nodeShape }
-                , target = { x = cod.x, y = cod.y, key = Just codId, shape = nodeShape }
-                }
-            )
-
-
-morphismBeingCreated : Model -> List GraphView.Edge
-morphismBeingCreated { interaction, diagram } =
-    case interaction of
-        CreatingMorphismFrom domainId mousePos ->
-            case diagram |> Diagram.getObject domainId of
-                Just domain ->
-                    [ { source = { x = domain.x, y = domain.y, key = Just domainId, shape = nodeShape }
-                      , target = { x = mousePos.x, y = mousePos.y, key = Nothing, shape = None }
-                      }
-                    ]
-
-                Nothing ->
-                    []
-
-        _ ->
-            []
-
-
-nodeShape : Shape
-nodeShape =
-    Circle 15
 
 
 
