@@ -95,7 +95,7 @@ type Target
 -}
 type alias State =
     { interaction : InteractionState
-    , drag : Draggable.State
+    , drag : Draggable.State ()
     }
 
 
@@ -191,8 +191,8 @@ type Msg
     | OnDragBy Delta
     | OnDragEnd
     | OnMouseUp Target
-    | DragMsgWithMouseState Draggable.Msg (Mouse.State Target)
-    | DragMsg Draggable.Msg
+    | DragMsgWithMouseState (Draggable.Msg ()) (Mouse.State Target)
+    | DragMsg (Draggable.Msg ())
 
 
 {-|
@@ -262,7 +262,7 @@ asOutput maybeMsg =
             NoOutput
 
 
-draggableConfig : Draggable.Config Msg
+draggableConfig : Draggable.Config () Msg
 draggableConfig =
     Draggable.customConfig
         [ Draggable.onClick (\_ -> OnClick)

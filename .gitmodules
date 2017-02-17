@@ -1,3 +1,0 @@
-[submodule "libs/elm-draggable"]
-	path = libs/elm-draggable
-	url = git@github.com:ggazzi/elm-draggable.git
