@@ -13,9 +13,9 @@ module GraphView
           -- Configuration of the View
         , ViewConfig
         , viewConfig
-        , Node
-        , Edge
-        , Endpoint
+        , NodeInfo
+        , EdgeInfo
+        , Endpoint(..)
         , Shape(..)
         , Output(..)
         )
@@ -29,9 +29,10 @@ This module provides utilities for displaying graphs.
 @docs UpdateConfig, Target, updateConfig
 
 # Configuration of the View
-@docs ViewConfig, viewConfig, Node, Edge, Endpoint, Shape, Output
+@docs ViewConfig, viewConfig, NodeInfo, EdgeInfo, Endpoint, Shape, Output
 -}
 
+import Dict exposing (Dict)
 import Draggable as Draggable exposing (Delta)
 import Draggable.Events as Draggable
 import Html exposing (Html)
@@ -42,7 +43,6 @@ import Position exposing (Position)
 import Svg exposing (Svg)
 import Svg.Attributes as Attr
 import Svg.Events as Svg
-import Svg.Lazy as Svg
 import Svg.Keyed
 
 
@@ -234,10 +234,9 @@ subscriptions envelope (State { drag }) =
 type ViewConfig msg node edge
     = ViewConfig
         { asMsg : Msg -> msg
-        , asNode : node -> Node
-        , nodeId : node -> Int
-        , asEdge : edge -> Edge
-        , edgeKey : edge -> String
+        , getNodeInfo : node -> NodeInfo
+        , nodeView : node -> List (Svg msg)
+        , getEdgeInfo : edge -> EdgeInfo
         }
 
 
@@ -245,10 +244,9 @@ type ViewConfig msg node edge
 -}
 viewConfig :
     { asMsg : Msg -> msg
-    , asNode : node -> Node
-    , nodeId : node -> Int
-    , asEdge : edge -> Edge
-    , edgeKey : edge -> String
+    , getNodeInfo : node -> NodeInfo
+    , nodeView : node -> List (Svg msg)
+    , getEdgeInfo : edge -> EdgeInfo
     }
     -> ViewConfig msg node edge
 viewConfig =
@@ -257,36 +255,38 @@ viewConfig =
 
 {-| Description of how a node should be displayed.
 -}
-type alias Node =
-    { name : String
+type alias NodeInfo =
+    { id : Int
     , x : Float
     , y : Float
     , shape : Shape
-    , selected : Bool
     }
 
 
 {-| Description of how an edge should be displayed.
 -}
-type alias Edge =
-    { source : Endpoint
+type alias EdgeInfo =
+    { id : Int
+    , source : Endpoint
     , target : Endpoint
     }
 
 
 {-| Description of edge endpoints, which influence how an edge is displayed.
 -}
-type alias Endpoint =
-    { x : Float
-    , y : Float
-    , shape : Shape
-    }
+type Endpoint
+    = EndpointNode Int
+    | EndpointPosition Position
+
+
+type alias ResolvedEndpoint =
+    { x : Float, y : Float, shape : Shape }
 
 
 {-| Possible shapes for nodes.
 -}
 type Shape
-    = None
+    = NoShape
     | Circle Float
 
 
@@ -300,13 +300,10 @@ Create a graph view. The `ViewConfig` argument describes how the nodes and edges
   __Note:__ The `List Node`, `List Edge` and `List (Svg msg)` arguments should be computed with information from the model, but generally not stored in it. The `ViewConfig` is view code and should _always_ be kept separate from the model.
 -}
 view : ViewConfig msg node edge -> List node -> List edge -> List (Svg msg) -> Html msg
-view ((ViewConfig { nodeId, edgeKey }) as config) nodes edges additionalElements =
+view config nodes edges additionalElements =
     let
-        showNode =
-            \node -> ( toString <| nodeId node, nodeView config node )
-
-        showEdge =
-            \edge -> ( edgeKey edge, edgeView config edge )
+        ( nodeInfos, edgeInfos ) =
+            preprocessNodesAndEdges config nodes edges
     in
         Svg.svg
             [ style
@@ -322,13 +319,61 @@ view ((ViewConfig { nodeId, edgeKey }) as config) nodes edges additionalElements
                 , Attr.stroke "black"
                 , Attr.cursor "pointer"
                 ]
-                (List.map showEdge edges)
+                (List.map
+                    (\( key, edge ) -> ( toString key, edgeView edge ))
+                    (Dict.toList edgeInfos)
+                )
              , Svg.Keyed.node "g"
                 [ Attr.class "nodes-view" ]
-                (List.map showNode nodes)
+                (List.map
+                    (\( key, node ) -> ( toString key, nodeView config node ))
+                    (Dict.toList nodeInfos)
+                )
              ]
                 ++ additionalElements
             )
+
+
+preprocessNodesAndEdges : ViewConfig msg node edge -> List node -> List edge -> ( Dict Int ( NodeInfo, node ), Dict Int ( EdgeInfo, ResolvedEndpoint, ResolvedEndpoint ) )
+preprocessNodesAndEdges (ViewConfig { getNodeInfo, getEdgeInfo }) nodes edges =
+    let
+        preprocessNode node =
+            let
+                nodeInfo =
+                    getNodeInfo node
+            in
+                ( nodeInfo.id, ( nodeInfo, node ) )
+
+        nodeInfos =
+            Dict.fromList (List.map preprocessNode nodes)
+
+        preprocessEdge edge =
+            let
+                edgeInfo =
+                    getEdgeInfo edge
+            in
+                case ( resolveEndpoint nodeInfos edgeInfo.source, resolveEndpoint nodeInfos edgeInfo.target ) of
+                    ( Just source_, Just target_ ) ->
+                        Just ( edgeInfo.id, ( edgeInfo, source_, target_ ) )
+
+                    _ ->
+                        Nothing
+
+        edgeInfos =
+            Dict.fromList (List.filterMap preprocessEdge edges)
+    in
+        ( nodeInfos, edgeInfos )
+
+
+resolveEndpoint : Dict Int ( NodeInfo, node ) -> Endpoint -> Maybe ResolvedEndpoint
+resolveEndpoint nodes endpoint =
+    case endpoint of
+        EndpointNode key ->
+            Dict.get key nodes
+                |> Maybe.map (\( { x, y, shape }, _ ) -> { x = x, y = y, shape = shape })
+
+        EndpointPosition { x, y } ->
+            Just { x = x, y = y, shape = NoShape }
 
 
 background : ViewConfig msg node edge -> Svg msg
@@ -352,64 +397,34 @@ background (ViewConfig { asMsg }) =
 -- NODES
 
 
-nodeView : ViewConfig msg node edge -> node -> Svg msg
-nodeView (ViewConfig { asMsg, asNode, nodeId }) value =
+nodeView : ViewConfig msg node edge -> ( NodeInfo, node ) -> Svg msg
+nodeView (ViewConfig { nodeView, asMsg }) ( { id, x, y, shape }, node ) =
     let
-        { name, x, y, shape, selected } =
-            asNode value
-
-        nodeWrapper =
-            Svg.g
-                ([ Attr.class "node"
-                 , Attr.transform translate
-                 , Attr.cursor "pointer"
-                 ]
-                    ++ handlerAttributes asMsg (OnNode <| nodeId value)
-                )
-
         translate =
             "translate(" ++ toString x ++ "," ++ toString y ++ ")"
     in
-        nodeWrapper <|
-            case shape of
-                Circle radius ->
-                    [ Svg.circle
-                        [ Attr.r (toString radius)
-                        , if selected then
-                            Attr.fill "lightgrey"
-                          else
-                            Attr.fill "white"
-                        , Attr.stroke "lightgrey"
-                        , Attr.strokeWidth "1"
-                        ]
-                        []
-                    , Svg.text_
-                        [ Attr.textAnchor "middle"
-                        , Attr.y "5"
-                        ]
-                        [ Svg.text name
-                        ]
-                    ]
-
-                None ->
-                    []
+        Svg.g
+            ([ Attr.class "node"
+             , Attr.transform translate
+             , Attr.cursor "pointer"
+             ]
+                ++ handlerAttributes asMsg (OnNode id)
+            )
+            (nodeView node)
 
 
 
 -- EDGES
 
 
-edgeView : ViewConfig msg node edge -> edge -> Svg msg
-edgeView (ViewConfig { asEdge }) value =
+edgeView : ( EdgeInfo, ResolvedEndpoint, ResolvedEndpoint ) -> Svg msg
+edgeView ( _, source, target ) =
     let
-        edge =
-            asEdge value
-
-        { source, target, length } =
-            adjustEndpoints edge
+        ( adjustedSource, adjustedTarget, length ) =
+            adjustEndpoints source target
     in
         Svg.path
-            [ Attr.class "morphism"
+            [ Attr.class "edge"
             , Attr.stroke edgeColor
             , Attr.strokeWidth "1.5"
             , Attr.markerEnd ("url(#" ++ arrowhead.id ++ ")")
@@ -418,13 +433,13 @@ edgeView (ViewConfig { asEdge }) value =
                     "M0 0"
                     -- Dummy path, nothing should be shown
                 else
-                    moveTo source ++ lineTo target
+                    moveTo adjustedSource ++ lineTo adjustedTarget
             ]
             []
 
 
-adjustEndpoints : Edge -> { source : Position, target : Position, length : Float }
-adjustEndpoints { source, target } =
+adjustEndpoints : ResolvedEndpoint -> ResolvedEndpoint -> ( Position, Position, Float )
+adjustEndpoints source target =
     let
         displaceBy amount { x, y } =
             { x = x + amount * dx / length
@@ -437,26 +452,26 @@ adjustEndpoints { source, target } =
         length =
             sqrt (dx * dx + dy * dy)
     in
-        { source = source |> displaceBy (sourceDisplacement source)
-        , target = target |> displaceBy (targetDisplacement target)
-        , length = length
-        }
+        ( source |> displaceBy (sourceDisplacement source)
+        , target |> displaceBy (targetDisplacement target)
+        , length
+        )
 
 
-sourceDisplacement : Endpoint -> Float
+sourceDisplacement : { a | shape : Shape } -> Float
 sourceDisplacement { shape } =
     case shape of
-        None ->
+        NoShape ->
             0
 
         Circle radius ->
             radius
 
 
-targetDisplacement : Endpoint -> Float
+targetDisplacement : { a | shape : Shape } -> Float
 targetDisplacement { shape } =
     case shape of
-        None ->
+        NoShape ->
             -arrowhead.length
 
         Circle radius ->

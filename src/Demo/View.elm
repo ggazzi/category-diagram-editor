@@ -4,7 +4,7 @@ import Demo.Model exposing (..)
 import Demo.Update exposing (..)
 import Diagram exposing (Diagram, Object, ObjectId, Morphism)
 import Diagram.Selection as Selection exposing (Selection)
-import GraphView exposing (Shape(..))
+import GraphView exposing (Shape(..), Endpoint(..))
 import Html exposing (Html, h1, h2, div, ul, li, p, text, textarea)
 import Html.Attributes as Html exposing (style)
 import Html.Events as Html
@@ -99,12 +99,7 @@ morphismBeingCreated : Model -> List ViewEdge
 morphismBeingCreated { interaction, diagram } =
     case interaction of
         CreatingMorphismFrom domainId mousePos ->
-            case diagram |> Diagram.getObject domainId of
-                Just domain ->
-                    [ VirtualMorphism domain mousePos "morphismBeingCreated" ]
-
-                Nothing ->
-                    []
+            [ VirtualMorphism domainId mousePos "morphismBeingCreated" ]
 
         _ ->
             []
@@ -116,7 +111,7 @@ morphismBeingCreated { interaction, diagram } =
 
 type ViewEdge
     = ActualMorphism ( Object, ( ObjectId, ObjectId ), Morphism, Object )
-    | VirtualMorphism Object Position String
+    | VirtualMorphism ObjectId Position String
 
 
 graphViewConfig :
@@ -125,35 +120,46 @@ graphViewConfig :
 graphViewConfig selection =
     GraphView.viewConfig
         { asMsg = GraphViewMsg
-        , asNode =
-            \( id, { x, y, name } ) ->
-                { name = name
+        , getNodeInfo =
+            \( id, { x, y } ) ->
+                { id = id
                 , x = x
                 , y = y
                 , shape = nodeShape
-                , selected = selection |> Selection.hasObject id
                 }
-        , nodeId = \( id, _ ) -> id
-        , asEdge =
+        , getEdgeInfo =
             \morphism ->
                 case morphism of
                     ActualMorphism ( dom, ( domId, codId ), _, cod ) ->
-                        { source = { x = dom.x, y = dom.y, shape = nodeShape }
-                        , target = { x = cod.x, y = cod.y, shape = nodeShape }
+                        { id = 2 ^ domId * 3 ^ codId
+                        , source = EndpointNode domId
+                        , target = EndpointNode codId
                         }
 
-                    VirtualMorphism dom position _ ->
-                        { source = { x = dom.x, y = dom.y, shape = nodeShape }
-                        , target = { x = position.x, y = position.y, shape = None }
+                    VirtualMorphism domId position _ ->
+                        { id = 2 ^ domId
+                        , source = EndpointNode domId
+                        , target = EndpointPosition position
                         }
-        , edgeKey =
-            \morphism ->
-                case morphism of
-                    ActualMorphism ( _, domainAndCodomainIds, _, _ ) ->
-                        toString domainAndCodomainIds
-
-                    VirtualMorphism _ _ key ->
-                        key
+        , nodeView =
+            \( id, { name } ) ->
+                [ Svg.circle
+                    [ Attr.r "15"
+                    , if selection |> Selection.hasObject id then
+                        Attr.fill "lightgrey"
+                      else
+                        Attr.fill "white"
+                    , Attr.stroke "lightgrey"
+                    , Attr.strokeWidth "1"
+                    ]
+                    []
+                , Svg.text_
+                    [ Attr.textAnchor "middle"
+                    , Attr.y "5"
+                    ]
+                    [ Svg.text name
+                    ]
+                ]
         }
 
 
