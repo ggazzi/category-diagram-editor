@@ -13,6 +13,7 @@ import Json.Decode
 import Position exposing (Position)
 import Svg exposing (Svg)
 import Svg.Attributes as Attr
+import MeasureText exposing (measureText)
 
 
 view : Model -> Html Msg
@@ -121,11 +122,11 @@ graphViewConfig selection =
     GraphView.viewConfig
         { asMsg = GraphViewMsg
         , getNodeInfo =
-            \( id, { x, y } ) ->
+            \( id, { x, y, name } ) ->
                 { id = id
                 , x = x
                 , y = y
-                , shape = nodeShape
+                , shape = Rectangle (nodeSize name + 6) 25
                 }
         , getEdgeInfo =
             \morphism ->
@@ -143,29 +144,38 @@ graphViewConfig selection =
                         }
         , nodeView =
             \( id, { name } ) ->
-                [ Svg.rect
-                    [ Attr.width "30"
-                    , Attr.height "30"
-                    , Attr.x "-15"
-                    , Attr.y "-15"
-                    , Attr.rx "3"
-                    , Attr.ry "3"
-                    , if selection |> Selection.hasObject id then
-                        Attr.fill "lightgrey"
-                      else
+                let
+                    width =
+                        nodeSize name + 6
+                in
+                    [ Svg.rect
+                        [ Attr.width (toString width)
+                        , Attr.height "25"
+                        , Attr.x (toString <| -width / 2)
+                        , Attr.y "-12.5"
+                        , Attr.rx "3"
+                        , Attr.ry "3"
+                        , if selection |> Selection.hasObject id then
+                            Attr.fill "lightgrey"
+                          else
                         Attr.fill "white"
-                    , Attr.stroke "lightgrey"
-                    , Attr.strokeWidth "1"
+                        , Attr.stroke "lightgrey"
+                        , Attr.strokeWidth "1"
+                        ]
+                        []
+                    , Svg.text_
+                        [ Attr.textAnchor "middle"
+                        , Attr.y "5"
+                        ]
+                        [ Svg.text name
+                        ]
                     ]
-                    []
-                , Svg.text_
-                    [ Attr.textAnchor "middle"
-                    , Attr.y "5"
-                    ]
-                    [ Svg.text name
-                    ]
-                ]
         }
+
+
+nodeSize : String -> Float
+nodeSize name =
+    toFloat <| max 19 (measureText "16px sans-serif" name)
 
 
 nodeShape : Shape

@@ -26,7 +26,7 @@ main =
 init : ( Model, Cmd Msg )
 init =
     ( { diagram = singleMorphism
-      , uid = 0
+      , uid = 100
       , selection = Selection.empty
       , interaction = Idle
       , graphView = GraphView.init
