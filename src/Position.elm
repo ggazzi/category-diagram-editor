@@ -2,6 +2,7 @@ module Position
     exposing
         ( Position
         , Positioned
+        , positionOf
         , Delta
         , moveBy
         )
@@ -20,6 +21,11 @@ type alias Position =
 -}
 type alias Positioned a =
     { a | x : Float, y : Float }
+
+
+positionOf : Positioned a -> Position
+positionOf { x, y } =
+    { x = x, y = y }
 
 
 {-| Type for representing displacements.

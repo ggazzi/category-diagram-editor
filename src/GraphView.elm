@@ -39,7 +39,7 @@ import Html exposing (Html)
 import Html.Attributes exposing (style)
 import Json.Decode as Json
 import Mouse.State as Mouse
-import Position exposing (Position)
+import Position exposing (Position, Positioned, positionOf, moveBy)
 import Svg exposing (Svg)
 import Svg.Attributes as Attr
 import Svg.Events as Svg
@@ -441,41 +441,103 @@ edgeView ( _, source, target ) =
 adjustEndpoints : ResolvedEndpoint -> ResolvedEndpoint -> ( Position, Position, Float )
 adjustEndpoints source target =
     let
-        displaceBy amount { x, y } =
-            { x = x + amount * dx / length
-            , y = y + amount * dy / length
-            }
-
         ( dx, dy ) =
             ( target.x - source.x, target.y - source.y )
 
-        length =
-            sqrt (dx * dx + dy * dy)
+        segment =
+            { start = source
+            , end = target
+            , dx = dx
+            , dy = dy
+            , length =
+                sqrt (dx * dx + dy * dy)
+            }
+
+        minimumArrowLength =
+            1
+
+        adjusted =
+            segment
+                |> shrinkSegmentTo
+                    ( intersectAtStart segment source.shape
+                    , intersectAtEnd segment target.shape - arrowhead.length / segment.length
+                    )
     in
-        ( source |> displaceBy (sourceDisplacement source)
-        , target |> displaceBy (targetDisplacement target)
-        , length
+        ( positionOf adjusted.start
+        , positionOf adjusted.end
+        , adjusted.length
         )
 
 
-sourceDisplacement : { a | shape : Shape } -> Float
-sourceDisplacement { shape } =
+type alias Segment a =
+    { start : Positioned a
+    , end : Positioned a
+    , dx : Float
+    , dy : Float
+    , length : Float
+    }
+
+
+reverseSegment : Segment a -> Segment a
+reverseSegment { start, end, dx, dy, length } =
+    { start = end, end = start, dx = -dx, dy = -dy, length = length }
+
+
+shrinkSegmentTo : ( Float, Float ) -> Segment a -> Segment a
+shrinkSegmentTo ( tStart, tEnd ) ({ start, end, dx, dy, length } as segment) =
+    let
+        ( tStart_, tEnd_ ) =
+            ( clamp 0 1 tStart, clamp 0 1 tEnd )
+
+        dt =
+            tEnd_ - tStart_
+    in
+        { segment
+            | start = { start | x = start.x + tStart_ * dx, y = start.y + tStart_ * dy }
+            , end = { end | x = start.x + tEnd_ * dx, y = start.y + tEnd_ * dy }
+            , dx = dx * dt
+            , dy = dy * dt
+            , length = length * dt
+        }
+
+
+{-| Given a line segment and a shape centered at the segment's
+starting point, calculate the intersection between them.
+
+The intersection is returned as a parameter `t` for the line segment's
+equation. The point of intersection may be calculated with
+`(segment.start.x + t * segment.dx, segment.start.y + t * segment.dy)`.
+
+The existence of a unique endpoint is guaranteed since all `Shape`s
+are convex, the segment's starting point is within the shape.
+-}
+intersectAtStart : Segment a -> Shape -> Float
+intersectAtStart segment shape =
+    let
+        t =
+            intersectAtEnd (reverseSegment segment) shape
+    in
+        1 - t
+
+
+{-| Given a line segment and a shape centered at the segment's
+endpoint, calculate the intersection between them.
+
+The intersection is returned as a parameter `t` for the line segment's
+equation. The point of intersection may be calculated with
+`(segment.start.x + t * segment.dx, segment.start.y + t * segment.dy)`.
+
+The existence of a unique endpoint is guaranteed since all `Shape`s
+are convex, the segment's endpoint is within the shape.
+-}
+intersectAtEnd : Segment a -> Shape -> Float
+intersectAtEnd { start, end, dx, dy, length } shape =
     case shape of
         NoShape ->
-            0
+            1
 
         Circle radius ->
-            radius
-
-
-targetDisplacement : { a | shape : Shape } -> Float
-targetDisplacement { shape } =
-    case shape of
-        NoShape ->
-            -arrowhead.length
-
-        Circle radius ->
-            -(radius + arrowhead.length)
+            1 - (radius / length)
 
 
 
