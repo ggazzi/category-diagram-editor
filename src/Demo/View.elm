@@ -143,8 +143,13 @@ graphViewConfig selection =
                         }
         , nodeView =
             \( id, { name } ) ->
-                [ Svg.circle
-                    [ Attr.r "15"
+                [ Svg.rect
+                    [ Attr.width "30"
+                    , Attr.height "30"
+                    , Attr.x "-15"
+                    , Attr.y "-15"
+                    , Attr.rx "3"
+                    , Attr.ry "3"
                     , if selection |> Selection.hasObject id then
                         Attr.fill "lightgrey"
                       else
@@ -165,7 +170,7 @@ graphViewConfig selection =
 
 nodeShape : Shape
 nodeShape =
-    Circle 15
+    Rectangle 30 30
 
 
 selectionRectangle : InteractionState -> Svg msg

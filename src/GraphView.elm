@@ -288,6 +288,7 @@ type alias ResolvedEndpoint =
 type Shape
     = NoShape
     | Circle Float
+    | Rectangle Float Float
 
 
 
@@ -449,8 +450,7 @@ adjustEndpoints source target =
             , end = target
             , dx = dx
             , dy = dy
-            , length =
-                sqrt (dx * dx + dy * dy)
+            , length = sqrt (dx * dx + dy * dy)
             }
 
         minimumArrowLength =
@@ -538,6 +538,25 @@ intersectAtEnd { start, end, dx, dy, length } shape =
 
         Circle radius ->
             1 - (radius / length)
+
+        Rectangle width height ->
+            let
+                intersect1D length start end delta =
+                    let
+                        halfLength =
+                            length / 2
+
+                        ( min, max ) =
+                            ( end - halfLength, end + halfLength )
+                    in
+                        if delta > 1.0e-5 then
+                            (min - start) / delta
+                        else if delta < -1.0e-5 then
+                            (max - start) / delta
+                        else
+                            1
+            in
+                max (intersect1D width start.x end.x dx) (intersect1D height start.y end.y dy)
 
 
 
