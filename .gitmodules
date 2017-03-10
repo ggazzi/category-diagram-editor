@@ -1,0 +1,3 @@
+[submodule "libs/elm-draggable"]
+	path = libs/elm-draggable
+	url = git@github.com:zaboco/elm-draggable.git

@@ -33,13 +33,12 @@ This module provides utilities for displaying graphs.
 -}
 
 import Dict exposing (Dict)
-import Draggable as Draggable exposing (Delta)
-import Draggable.Events as Draggable
+import Draggable as Draggable
 import Html exposing (Html)
 import Html.Attributes exposing (style)
 import Json.Decode as Json
 import Mouse.State as Mouse
-import Position exposing (Position, Positioned, positionOf, moveBy)
+import Position exposing (Position, Positioned, positionOf, Delta, moveBy)
 import Svg exposing (Svg)
 import Svg.Attributes as Attr
 import Svg.Events as Svg
@@ -54,7 +53,7 @@ import Svg.Keyed
 type State
     = State
         { interaction : InteractionState
-        , drag : Draggable.State ()
+        , drag : Draggable.State
         }
 
 
@@ -84,13 +83,9 @@ init =
 {-| A message type to update the graph view.
 -}
 type Msg
-    = OnClick
-    | OnDragStart
-    | OnDragBy Delta
-    | OnDragEnd
-    | OnMouseUp Target
-    | DragMsgWithMouseState (Draggable.Msg ()) (Mouse.State Target)
-    | DragMsg (Draggable.Msg ())
+    = OnMouseUp Target
+    | TriggerDrag Draggable.State (Mouse.State Target)
+    | UpdateDrag Draggable.State Draggable.DragEvent
 
 
 {-|
@@ -113,46 +108,37 @@ following:
 update : (Msg -> msg) -> UpdateConfig msg -> Msg -> State -> ( State, Output msg )
 update envelope (UpdateConfig config) msg (State ({ interaction } as model)) =
     case msg of
-        OnClick ->
-            case interaction of
-                AwaitingInteraction mouseState ->
-                    ( State model, asOutput <| config.onClick mouseState )
-
-                Idle ->
-                    ( State model, NoOutput )
-
-        OnDragStart ->
-            case interaction of
-                AwaitingInteraction mouseState ->
-                    ( State model, asOutput <| config.onDragStart mouseState )
-
-                Idle ->
-                    ( State model, NoOutput )
-
-        OnDragBy delta ->
-            ( State model, asOutput <| config.onDragBy delta )
-
-        OnDragEnd ->
-            ( State model, asOutput <| config.onDragEnd )
-
         OnMouseUp target ->
             ( State model, asOutput <| config.onMouseUp target )
 
-        DragMsgWithMouseState dragMsg mouseState ->
-            let
-                ( newModel, cmd ) =
-                    Draggable.update draggableConfig dragMsg model
-            in
-                ( State { newModel | interaction = AwaitingInteraction mouseState }
-                , OutCmd <| Cmd.map envelope cmd
-                )
+        TriggerDrag newDrag target ->
+            ( State { model | drag = newDrag, interaction = AwaitingInteraction target }, NoOutput )
 
-        DragMsg dragMsg ->
-            let
-                ( newModel, cmd ) =
-                    Draggable.update draggableConfig dragMsg model
-            in
-                ( State newModel, OutCmd <| Cmd.map envelope cmd )
+        UpdateDrag newDrag event ->
+            ( State { model | drag = newDrag }
+            , case event of
+                Draggable.DragBy delta ->
+                    asOutput (config.onDragBy delta)
+
+                Draggable.DragStart ->
+                    case interaction of
+                        AwaitingInteraction mouseState ->
+                            asOutput (config.onDragStart mouseState)
+
+                        Idle ->
+                            NoOutput
+
+                Draggable.DragEnd ->
+                    asOutput config.onDragEnd
+
+                Draggable.Click ->
+                    case interaction of
+                        AwaitingInteraction mouseState ->
+                            asOutput (config.onClick mouseState)
+
+                        Idle ->
+                            NoOutput
+            )
 
 
 asOutput : Maybe msg -> Output msg
@@ -163,16 +149,6 @@ asOutput maybeMsg =
 
         Nothing ->
             NoOutput
-
-
-draggableConfig : Draggable.Config () Msg
-draggableConfig =
-    Draggable.customConfig
-        [ Draggable.onClick (\_ -> OnClick)
-        , Draggable.onDragStart (\_ -> OnDragStart)
-        , Draggable.onDragBy OnDragBy
-        , Draggable.onDragEnd OnDragEnd
-        ]
 
 
 
@@ -222,7 +198,7 @@ updateConfig =
 -}
 subscriptions : (Msg -> msg) -> State -> Sub msg
 subscriptions envelope (State { drag }) =
-    Draggable.subscriptions (envelope << DragMsg) drag
+    Draggable.eventSubscriptions (\state ev -> envelope <| UpdateDrag state ev) drag
 
 
 
@@ -566,7 +542,7 @@ intersectAtEnd { start, end, dx, dy, length } shape =
 handlerAttributes : (Msg -> msg) -> Target -> List (Svg.Attribute msg)
 handlerAttributes envelope target =
     [ Draggable.customMouseTrigger (Mouse.state target)
-        (\dragMsg mouseState -> envelope <| DragMsgWithMouseState dragMsg mouseState)
+        (\dragState mouseState -> envelope <| TriggerDrag dragState mouseState)
     , Svg.on "mouseup" (Json.succeed <| envelope <| OnMouseUp target)
     ]
 
