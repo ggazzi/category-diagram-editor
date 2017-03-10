@@ -8,7 +8,7 @@ module Demo.Update
 import Demo.Model exposing (..)
 import Diagram exposing (Diagram, ObjectId)
 import Diagram.Selection as Selection
-import GraphView exposing (Target(..), Output(..))
+import GraphView as GraphView exposing (Target(..), Event)
 import Mouse.Modifiers as Mouse
 import Position exposing (Position, Delta, moveBy)
 
@@ -181,65 +181,64 @@ update msg ({ diagram, interaction, selection } as model) =
 
         GraphViewMsg graphViewMsg ->
             let
-                ( newGraphViewModel, output ) =
-                    GraphView.update GraphViewMsg graphViewConfig graphViewMsg model.graphView
+                ( newGraphViewModel, event ) =
+                    GraphView.update graphViewMsg model.graphView
 
                 newModel =
                     { model | graphView = newGraphViewModel }
             in
-                case output of
-                    OutCmd cmd ->
-                        ( newModel, cmd )
-
-                    OutMsg msg ->
+                case event |> Maybe.andThen interpretEvent of
+                    Just msg ->
                         update msg newModel
 
-                    NoOutput ->
+                    Nothing ->
                         ( newModel, Cmd.none )
 
 
-graphViewConfig : GraphView.UpdateConfig Msg
-graphViewConfig =
-    GraphView.updateConfig
-        { onMouseUp =
-            \target ->
-                case target of
-                    OnBackground ->
-                        Nothing
+interpretEvent : Event -> Maybe Msg
+interpretEvent event =
+    case event of
+        GraphView.MouseUp target ->
+            case target of
+                OnBackground ->
+                    Nothing
 
-                    OnNode id ->
-                        Just (CreateMorphismTo id)
-        , onClick =
-            \{ target, modifiers, position } ->
-                case ( target, Mouse.hasShift modifiers ) of
-                    ( OnBackground, False ) ->
-                        Just (ClearSelection)
+                OnNode id ->
+                    Just (CreateMorphismTo id)
 
-                    ( OnBackground, True ) ->
-                        Just (CreateObjectAt position)
+        GraphView.Click { target, modifiers, position } ->
+            case ( target, Mouse.hasShift modifiers ) of
+                ( OnBackground, False ) ->
+                    Just ClearSelection
 
-                    ( OnNode id, False ) ->
-                        Just (SelectObject id SetSelection)
+                ( OnBackground, True ) ->
+                    Just (CreateObjectAt position)
 
-                    ( OnNode id, True ) ->
-                        Just (SelectObject id AddToSelection)
-        , onDragStart =
-            \{ target, modifiers, position } ->
-                case ( target, Mouse.hasShift modifiers ) of
-                    ( OnNode id, False ) ->
-                        Just (StartMovingObjects id)
+                ( OnNode id, False ) ->
+                    Just (SelectObject id SetSelection)
 
-                    ( OnNode id, True ) ->
-                        Just (StartCreatingMorphismFrom id)
+                ( OnNode id, True ) ->
+                    Just (SelectObject id AddToSelection)
 
-                    ( OnBackground, False ) ->
-                        Just (StartSelectingRectangle position SetSelection)
+        GraphView.DragStart { target, modifiers, position } ->
+            case ( target, Mouse.hasShift modifiers ) of
+                ( OnNode id, False ) ->
+                    Just (StartMovingObjects id)
 
-                    ( OnBackground, True ) ->
-                        Just (StartSelectingRectangle position AddToSelection)
-        , onDragBy = Just << DragBy
-        , onDragEnd = Just DragEnd
-        }
+                ( OnNode id, True ) ->
+                    Just (StartCreatingMorphismFrom id)
+
+                ( OnBackground, False ) ->
+                    Just (StartSelectingRectangle position SetSelection)
+
+                ( OnBackground, True ) ->
+                    Just (StartSelectingRectangle position AddToSelection)
+
+        GraphView.DragBy delta ->
+            Just (DragBy delta)
+
+        GraphView.DragEnd ->
+            Just DragEnd
 
 
 

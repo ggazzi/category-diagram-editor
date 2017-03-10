@@ -7,9 +7,8 @@ module GraphView
         , subscriptions
         , view
           -- Configuration of Events
-        , UpdateConfig
+        , Event(..)
         , Target(..)
-        , updateConfig
           -- Configuration of the View
         , ViewConfig
         , viewConfig
@@ -17,7 +16,6 @@ module GraphView
         , EdgeInfo
         , Endpoint(..)
         , Shape(..)
-        , Output(..)
         )
 
 {-|
@@ -88,14 +86,12 @@ type Msg
     | UpdateDrag Draggable.State Draggable.DragEvent
 
 
-{-|
- Possible outputs of updating the graph view: either a message to the parent module,
- a command to be run, or nothing.
--}
-type Output msg
-    = OutCmd (Cmd msg)
-    | OutMsg msg
-    | NoOutput
+type Event
+    = Click (Mouse.State Target)
+    | DragStart (Mouse.State Target)
+    | DragBy Delta
+    | DragEnd
+    | MouseUp Target
 
 
 {-|
@@ -105,68 +101,44 @@ following:
   * A message that should be handled by the containing module
   * No output
 -}
-update : (Msg -> msg) -> UpdateConfig msg -> Msg -> State -> ( State, Output msg )
-update envelope (UpdateConfig config) msg (State ({ interaction } as model)) =
+update : Msg -> State -> ( State, Maybe Event )
+update msg (State ({ interaction } as model)) =
     case msg of
         OnMouseUp target ->
-            ( State model, asOutput <| config.onMouseUp target )
+            ( State model, Just (MouseUp target) )
 
         TriggerDrag newDrag target ->
-            ( State { model | drag = newDrag, interaction = AwaitingInteraction target }, NoOutput )
+            ( State { model | drag = newDrag, interaction = AwaitingInteraction target }, Nothing )
 
         UpdateDrag newDrag event ->
             ( State { model | drag = newDrag }
             , case event of
                 Draggable.DragBy delta ->
-                    asOutput (config.onDragBy delta)
+                    Just (DragBy delta)
 
                 Draggable.DragStart ->
                     case interaction of
                         AwaitingInteraction mouseState ->
-                            asOutput (config.onDragStart mouseState)
+                            Just (DragStart mouseState)
 
                         Idle ->
-                            NoOutput
+                            Nothing
 
                 Draggable.DragEnd ->
-                    asOutput config.onDragEnd
+                    Just DragEnd
 
                 Draggable.Click ->
                     case interaction of
                         AwaitingInteraction mouseState ->
-                            asOutput (config.onClick mouseState)
+                            Just (Click mouseState)
 
                         Idle ->
-                            NoOutput
+                            Nothing
             )
-
-
-asOutput : Maybe msg -> Output msg
-asOutput maybeMsg =
-    case maybeMsg of
-        Just msg ->
-            OutMsg msg
-
-        Nothing ->
-            NoOutput
 
 
 
 -- UPDATE CONFIG
-
-
-{-|
-Configuration for the `update` function of the graph view. This describes the messages that will be
-output by the component, to the parent application, for different events from the view.
--}
-type UpdateConfig msg
-    = UpdateConfig
-        { onClick : Mouse.State Target -> Maybe msg
-        , onDragStart : Mouse.State Target -> Maybe msg
-        , onDragBy : Delta -> Maybe msg
-        , onDragEnd : Maybe msg
-        , onMouseUp : Target -> Maybe msg
-        }
 
 
 {-| Type representing possible targets of interaction.
@@ -174,20 +146,6 @@ type UpdateConfig msg
 type Target
     = OnBackground
     | OnNode Int
-
-
-{-| Create a configuration for the update function, handling the given events.
--}
-updateConfig :
-    { onClick : Mouse.State Target -> Maybe msg
-    , onDragStart : Mouse.State Target -> Maybe msg
-    , onDragBy : Delta -> Maybe msg
-    , onDragEnd : Maybe msg
-    , onMouseUp : Target -> Maybe msg
-    }
-    -> UpdateConfig msg
-updateConfig =
-    UpdateConfig
 
 
 
