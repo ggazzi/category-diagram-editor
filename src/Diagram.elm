@@ -25,9 +25,10 @@ This module provides a data structure for representing category theory diagrams,
 -}
 
 import Graph exposing (Graph, Node, Edge)
+import IntDict
 import Json.Encode as Encode
 import Json.Decode as Decode exposing (Decoder)
-import IntDict
+import Position exposing (Delta)
 
 
 {-|
@@ -49,9 +50,11 @@ type alias Object =
 
 
 {-| Type for morphisms in the diagram.
+
+The control points are defined as displacements relative to the domain and codomain.
 -}
 type alias Morphism =
-    { name : String }
+    { name : String, controlPoints : ( Delta, Delta ) }
 
 
 {-| Type used to identify objects in a diagram.
@@ -248,10 +251,20 @@ decode =
                 (Decode.field "name" Decode.string)
 
         decodeMorphism =
-            Decode.map3 (\src tgt name -> ( ( src, tgt ), { name = name } ))
+            Decode.map5
+                (\src tgt name ctrlPoint1 ctrlPoint2 ->
+                    ( ( src, tgt )
+                    , { name = name, controlPoints = ( ctrlPoint1, ctrlPoint2 ) }
+                    )
+                )
                 (Decode.field "src" Decode.int)
                 (Decode.field "tgt" Decode.int)
                 (Decode.field "name" Decode.string)
+                (Decode.field "ctrlPoint1" decodePos)
+                (Decode.field "ctrlPoint2" decodePos)
+
+        decodePos =
+            Decode.map2 (\x y -> ( x, y )) Decode.float Decode.float
 
         convertIds =
             List.filterMap convertId

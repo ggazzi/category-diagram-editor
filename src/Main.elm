@@ -44,6 +44,6 @@ singleMorphism =
             ]
 
         morphisms =
-            [ ( ( 0, 1 ), Morphism "f" ) ]
+            [ ( ( 0, 1 ), Morphism "f" ( ( 0, 35 ), ( 0, -35 ) ) ) ]
     in
         Diagram.fromObjectsAndMorphisms objects morphisms

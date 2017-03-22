@@ -10,7 +10,7 @@ import Html.Attributes as Html exposing (style)
 import Html.Events as Html
 import Json.Encode
 import Json.Decode
-import Position exposing (Position)
+import Position exposing (Position, positionOf, moveBy)
 import Svg exposing (Svg)
 import Svg.Attributes as Attr
 import MeasureText exposing (measureText)
@@ -161,12 +161,19 @@ objectToNode selection ( id, { name, x, y } ) =
 
 
 morphismToEdge : ( Object, MorphismId, Morphism, Object ) -> GraphView.Edge
-morphismToEdge ( domain, id, _, codomain ) =
-    { id = id
-    , source = objectToEndpoint domain
-    , target = objectToEndpoint codomain
-    , controlPoints = []
-    }
+morphismToEdge ( domain, id, morphism, codomain ) =
+    let
+        ( delta1, delta2 ) =
+            morphism.controlPoints
+    in
+        { id = id
+        , source = objectToEndpoint domain
+        , target = objectToEndpoint codomain
+        , controlPoints =
+            [ positionOf domain |> moveBy delta1
+            , positionOf codomain |> moveBy delta2
+            ]
+        }
 
 
 objectToEndpoint : Object -> Endpoint

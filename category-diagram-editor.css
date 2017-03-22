@@ -7,3 +7,9 @@ html, head, body { padding:0; margin:0; }
 .elm-graph-diagrams__edge:hover path {
   stroke: grey;
 }
+
+.elm-graph-diagrams__edge__ctrlpoint:hover {
+  fill: grey;
+  stroke: grey;
+  r: 5;
+}

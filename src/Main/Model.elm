@@ -5,12 +5,13 @@ module Main.Model
         , SelectionMode(..)
         , findUniqueId
         , getObjectsWithinRectangle
+        , getControlPointsForNewMorphism
         )
 
 import Diagram exposing (Diagram, ObjectId)
 import Diagram.Selection exposing (Selection)
 import GraphView
-import Position exposing (Position)
+import Position exposing (Position, Delta)
 
 
 type alias Model =
@@ -68,3 +69,20 @@ getObjectsWithinRectangle start end =
                 Nothing
     in
         Diagram.objectsWithIds >> List.filterMap isWithinRectangle
+
+
+getControlPointsForNewMorphism : ObjectId -> ObjectId -> Diagram -> ( Delta, Delta )
+getControlPointsForNewMorphism domainId codomainId diagram =
+    case ( Diagram.getObject domainId diagram, Diagram.getObject codomainId diagram ) of
+        ( Just domain, Just codomain ) ->
+            let
+                dx =
+                    (codomain.x - domain.x) / 3
+
+                dy =
+                    (codomain.y - domain.y) / 3
+            in
+                ( ( dx, dy ), ( -dx, -dy ) )
+
+        _ ->
+            Debug.crash "Creating morphism between unknown objects."

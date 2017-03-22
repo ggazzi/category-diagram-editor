@@ -111,7 +111,12 @@ update msg ({ diagram, interaction, selection } as model) =
             case interaction of
                 CreatingMorphismFrom domainId _ ->
                     ( { model
-                        | diagram = diagram |> Diagram.insertMorphism ( domainId, codomainId ) { name = "" }
+                        | diagram =
+                            diagram
+                                |> Diagram.insertMorphism ( domainId, codomainId )
+                                    { name = ""
+                                    , controlPoints = getControlPointsForNewMorphism domainId codomainId diagram
+                                    }
                         , interaction = Idle
                       }
                     , Cmd.none
