@@ -10,14 +10,12 @@ module GraphView
         , UpdateConfig
         , Target(..)
         , updateConfig
-          -- Configuration of the View
-        , ViewConfig
-        , viewConfig
-        , NodeInfo
-        , EdgeInfo
-        , Endpoint(..)
-        , Shape(..)
         , Output(..)
+          -- View Model
+        , Node
+        , Edge
+        , Endpoint
+        , Shape(..)
         )
 
 {-|
@@ -26,13 +24,12 @@ This module provides utilities for displaying graphs.
 @docs State, Msg, init, update, subscriptions, view
 
 # Configuration of Events
-@docs UpdateConfig, Target, updateConfig
+@docs UpdateConfig, Target, updateConfig, Output
 
-# Configuration of the View
-@docs ViewConfig, viewConfig, NodeInfo, EdgeInfo, Endpoint, Shape, Output
+# View Model
+@docs Node, Edge, Endpoint, Shape
 -}
 
-import Dict exposing (Dict)
 import Draggable as Draggable exposing (Delta)
 import Draggable.Events as Draggable
 import Html exposing (Html)
@@ -229,57 +226,28 @@ subscriptions envelope (State { drag }) =
 -- VIEW CONFIG
 
 
-{-| Type for configuring how nodes and edges are identified and displayed.
+{-| Minimal information needed to display a node.
 -}
-type ViewConfig msg node edge
-    = ViewConfig
-        { asMsg : Msg -> msg
-        , getNodeInfo : node -> NodeInfo
-        , nodeView : node -> List (Svg msg)
-        , getEdgeInfo : edge -> EdgeInfo
-        }
-
-
-{-| Configure how nodes and edges should be identified and displayed.
--}
-viewConfig :
-    { asMsg : Msg -> msg
-    , getNodeInfo : node -> NodeInfo
-    , nodeView : node -> List (Svg msg)
-    , getEdgeInfo : edge -> EdgeInfo
-    }
-    -> ViewConfig msg node edge
-viewConfig =
-    ViewConfig
-
-
-{-| Description of how a node should be displayed.
--}
-type alias NodeInfo =
+type alias Node msg =
     { id : Int
     , x : Float
     , y : Float
-    , shape : Shape
+    , view : List (Svg msg)
     }
 
 
-{-| Description of how an edge should be displayed.
+{-| Minimal information needed to display an edge.
 -}
-type alias EdgeInfo =
-    { id : Int
+type alias Edge =
+    { id : ( Int, Int )
     , source : Endpoint
     , target : Endpoint
     }
 
 
-{-| Description of edge endpoints, which influence how an edge is displayed.
+{-| Endpoint of an edge.
 -}
-type Endpoint
-    = EndpointNode Int
-    | EndpointPosition Position
-
-
-type alias ResolvedEndpoint =
+type alias Endpoint =
     { x : Float, y : Float, shape : Shape }
 
 
@@ -300,85 +268,33 @@ Create a graph view. The `ViewConfig` argument describes how the nodes and edges
 
   __Note:__ The `List Node`, `List Edge` and `List (Svg msg)` arguments should be computed with information from the model, but generally not stored in it. The `ViewConfig` is view code and should _always_ be kept separate from the model.
 -}
-view : ViewConfig msg node edge -> List node -> List edge -> List (Svg msg) -> Html msg
-view config nodes edges additionalElements =
-    let
-        ( nodeInfos, edgeInfos ) =
-            preprocessNodesAndEdges config nodes edges
-    in
-        Svg.svg
-            [ style
-                [ ( "margin", "20px" )
-                , ( "width", "800px" )
-                , ( "height", "600px" )
-                ]
+view : (Msg -> msg) -> List (Node msg) -> List Edge -> List (Svg msg) -> Html msg
+view envelope nodes edges additionalElements =
+    Svg.svg
+        [ style
+            [ ( "margin", "20px" )
+            , ( "width", "800px" )
+            , ( "height", "600px" )
             ]
-            ([ Svg.defs [] [ arrowhead.svg ]
-             , background config
-             , Svg.Keyed.node "g"
-                [ Attr.class "edges-view"
-                , Attr.stroke "black"
-                , Attr.cursor "pointer"
-                ]
-                (List.map
-                    (\( key, edge ) -> ( toString key, edgeView edge ))
-                    (Dict.toList edgeInfos)
-                )
-             , Svg.Keyed.node "g"
-                [ Attr.class "nodes-view" ]
-                (List.map
-                    (\( key, node ) -> ( toString key, nodeView config node ))
-                    (Dict.toList nodeInfos)
-                )
-             ]
-                ++ additionalElements
-            )
+        ]
+        ([ Svg.defs [] [ arrowhead.svg ]
+         , background envelope
+         , Svg.Keyed.node "g"
+            [ Attr.class "edges-view"
+            , Attr.stroke "black"
+            , Attr.cursor "pointer"
+            ]
+            (List.map (\edge -> ( toString edge.id, edgeView edge )) edges)
+         , Svg.Keyed.node "g"
+            [ Attr.class "nodes-view" ]
+            (List.map (\node -> ( toString node.id, nodeView envelope node )) nodes)
+         ]
+            ++ additionalElements
+        )
 
 
-preprocessNodesAndEdges : ViewConfig msg node edge -> List node -> List edge -> ( Dict Int ( NodeInfo, node ), Dict Int ( EdgeInfo, ResolvedEndpoint, ResolvedEndpoint ) )
-preprocessNodesAndEdges (ViewConfig { getNodeInfo, getEdgeInfo }) nodes edges =
-    let
-        preprocessNode node =
-            let
-                nodeInfo =
-                    getNodeInfo node
-            in
-                ( nodeInfo.id, ( nodeInfo, node ) )
-
-        nodeInfos =
-            Dict.fromList (List.map preprocessNode nodes)
-
-        preprocessEdge edge =
-            let
-                edgeInfo =
-                    getEdgeInfo edge
-            in
-                case ( resolveEndpoint nodeInfos edgeInfo.source, resolveEndpoint nodeInfos edgeInfo.target ) of
-                    ( Just source_, Just target_ ) ->
-                        Just ( edgeInfo.id, ( edgeInfo, source_, target_ ) )
-
-                    _ ->
-                        Nothing
-
-        edgeInfos =
-            Dict.fromList (List.filterMap preprocessEdge edges)
-    in
-        ( nodeInfos, edgeInfos )
-
-
-resolveEndpoint : Dict Int ( NodeInfo, node ) -> Endpoint -> Maybe ResolvedEndpoint
-resolveEndpoint nodes endpoint =
-    case endpoint of
-        EndpointNode key ->
-            Dict.get key nodes
-                |> Maybe.map (\( { x, y, shape }, _ ) -> { x = x, y = y, shape = shape })
-
-        EndpointPosition { x, y } ->
-            Just { x = x, y = y, shape = NoShape }
-
-
-background : ViewConfig msg node edge -> Svg msg
-background (ViewConfig { asMsg }) =
+background : (Msg -> msg) -> Svg msg
+background envelope =
     Svg.rect
         ([ Attr.width "100%"
          , Attr.height "100%"
@@ -389,7 +305,7 @@ background (ViewConfig { asMsg }) =
          , Attr.ry "5px"
          , Attr.cursor "crosshair"
          ]
-            ++ handlerAttributes asMsg OnBackground
+            ++ handlerAttributes envelope OnBackground
         )
         []
 
@@ -398,28 +314,28 @@ background (ViewConfig { asMsg }) =
 -- NODES
 
 
-nodeView : ViewConfig msg node edge -> ( NodeInfo, node ) -> Svg msg
-nodeView (ViewConfig { nodeView, asMsg }) ( { id, x, y, shape }, node ) =
+nodeView : (Msg -> msg) -> Node msg -> Svg msg
+nodeView envelope node =
     let
         translate =
-            "translate(" ++ toString x ++ "," ++ toString y ++ ")"
+            "translate(" ++ toString node.x ++ "," ++ toString node.y ++ ")"
     in
         Svg.g
             ([ Attr.class "node"
              , Attr.transform translate
              , Attr.cursor "pointer"
              ]
-                ++ handlerAttributes asMsg (OnNode id)
+                ++ handlerAttributes envelope (OnNode node.id)
             )
-            (nodeView node)
+            node.view
 
 
 
 -- EDGES
 
 
-edgeView : ( EdgeInfo, ResolvedEndpoint, ResolvedEndpoint ) -> Svg msg
-edgeView ( _, source, target ) =
+edgeView : Edge -> Svg msg
+edgeView { source, target } =
     let
         ( adjustedSource, adjustedTarget, length ) =
             adjustEndpoints source target
@@ -439,7 +355,7 @@ edgeView ( _, source, target ) =
             []
 
 
-adjustEndpoints : ResolvedEndpoint -> ResolvedEndpoint -> ( Position, Position, Float )
+adjustEndpoints : Endpoint -> Endpoint -> ( Position, Position, Float )
 adjustEndpoints source target =
     let
         ( dx, dy ) =

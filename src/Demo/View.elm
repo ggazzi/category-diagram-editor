@@ -2,9 +2,9 @@ module Demo.View exposing (view)
 
 import Demo.Model exposing (..)
 import Demo.Update exposing (..)
-import Diagram exposing (Diagram, Object, ObjectId, Morphism)
+import Diagram exposing (Diagram, Object, ObjectId, Morphism, MorphismId)
 import Diagram.Selection as Selection exposing (Selection)
-import GraphView exposing (Shape(..), Endpoint(..))
+import GraphView exposing (Shape(..), Endpoint)
 import Html exposing (Html, h1, h2, div, ul, li, p, text, textarea)
 import Html.Attributes as Html exposing (style)
 import Html.Events as Html
@@ -27,10 +27,10 @@ view ({ diagram, selection, interaction } as model) =
         [ h1 [] [ text "Categorial Diagram Editor" ]
         , instructions
         , GraphView.view
-            (graphViewConfig selection)
-            (Diagram.objectsWithIds diagram)
+            GraphViewMsg
+            (diagram |> Diagram.objectsWithIds |> List.map (objectToNode selection))
             (morphismBeingCreated model
-                ++ List.map ActualMorphism (Diagram.morphismsWithIds diagram)
+                ++ List.map morphismToEdge (Diagram.morphismsWithIds diagram)
             )
             [ selectionRectangle interaction ]
         , textView diagram
@@ -96,11 +96,24 @@ textView diagram =
             ]
 
 
-morphismBeingCreated : Model -> List ViewEdge
+morphismBeingCreated : Model -> List GraphView.Edge
 morphismBeingCreated { interaction, diagram } =
     case interaction of
         CreatingMorphismFrom domainId mousePos ->
-            [ VirtualMorphism domainId mousePos "morphismBeingCreated" ]
+            case Diagram.getObject domainId diagram of
+                Just domain ->
+                    [ { id = ( domainId, -1 )
+                      , source = objectToEndpoint domain
+                      , target =
+                            { x = mousePos.x
+                            , y = mousePos.y
+                            , shape = NoShape
+                            }
+                      }
+                    ]
+
+                Nothing ->
+                    []
 
         _ ->
             []
@@ -115,62 +128,52 @@ type ViewEdge
     | VirtualMorphism ObjectId Position String
 
 
-graphViewConfig :
-    Selection
-    -> GraphView.ViewConfig Msg ( ObjectId, { a | name : String, x : Float, y : Float } ) ViewEdge
-graphViewConfig selection =
-    GraphView.viewConfig
-        { asMsg = GraphViewMsg
-        , getNodeInfo =
-            \( id, { x, y, name } ) ->
-                { id = id
-                , x = x
-                , y = y
-                , shape = Rectangle (nodeSize name + 6) 25
-                }
-        , getEdgeInfo =
-            \morphism ->
-                case morphism of
-                    ActualMorphism ( dom, ( domId, codId ), _, cod ) ->
-                        { id = 2 ^ domId * 3 ^ codId
-                        , source = EndpointNode domId
-                        , target = EndpointNode codId
-                        }
+objectToNode : Selection -> ( ObjectId, Object ) -> GraphView.Node msg
+objectToNode selection ( id, { name, x, y } ) =
+    { id = id
+    , x = x
+    , y = y
+    , view =
+        let
+            width =
+                nodeSize name + 6
+        in
+            [ Svg.rect
+                [ Attr.width (toString width)
+                , Attr.height "25"
+                , Attr.x (toString <| -width / 2)
+                , Attr.y "-12.5"
+                , Attr.rx "3"
+                , Attr.ry "3"
+                , if selection |> Selection.hasObject id then
+                    Attr.fill "lightgrey"
+                  else
+                    Attr.fill "white"
+                , Attr.stroke "lightgrey"
+                , Attr.strokeWidth "1"
+                ]
+                []
+            , Svg.text_
+                [ Attr.textAnchor "middle"
+                , Attr.y "5"
+                ]
+                [ Svg.text name
+                ]
+            ]
+    }
 
-                    VirtualMorphism domId position _ ->
-                        { id = 2 ^ domId
-                        , source = EndpointNode domId
-                        , target = EndpointPosition position
-                        }
-        , nodeView =
-            \( id, { name } ) ->
-                let
-                    width =
-                        nodeSize name + 6
-                in
-                    [ Svg.rect
-                        [ Attr.width (toString width)
-                        , Attr.height "25"
-                        , Attr.x (toString <| -width / 2)
-                        , Attr.y "-12.5"
-                        , Attr.rx "3"
-                        , Attr.ry "3"
-                        , if selection |> Selection.hasObject id then
-                            Attr.fill "lightgrey"
-                          else
-                        Attr.fill "white"
-                        , Attr.stroke "lightgrey"
-                        , Attr.strokeWidth "1"
-                        ]
-                        []
-                    , Svg.text_
-                        [ Attr.textAnchor "middle"
-                        , Attr.y "5"
-                        ]
-                        [ Svg.text name
-                        ]
-                    ]
-        }
+
+morphismToEdge : ( Object, MorphismId, Morphism, Object ) -> GraphView.Edge
+morphismToEdge ( domain, id, _, codomain ) =
+    { id = id
+    , source = objectToEndpoint domain
+    , target = objectToEndpoint codomain
+    }
+
+
+objectToEndpoint : Object -> Endpoint
+objectToEndpoint { x, y, name } =
+    { x = x, y = y, shape = Rectangle (nodeSize name + 6) 25 }
 
 
 nodeSize : String -> Float
