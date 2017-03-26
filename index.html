@@ -1,0 +1,17 @@
+<!DOCTYPE HTML>
+<html>
+  <head>
+    <meta charset="UTF-8">
+    <title>Main</title>
+    <link rel="stylesheet" href="category-diagram-editor.css">
+  </head>
+  <body>
+    <div id="main"></div>
+
+    <script type="text/javascript" src="category-diagram-editor.js"></script>
+    <script type="text/javascript">
+      var node = document.getElementById("main");
+      var app = Elm.Main.embed(node);
+    </script>
+  </body>
+</html>

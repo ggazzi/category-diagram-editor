@@ -1,0 +1,19 @@
+<!DOCTYPE HTML>
+<html>
+  <head>
+    <meta charset="UTF-8">
+    <title>Main</title>
+    <link rel="stylesheet" href="category-diagram-editor.css">
+  </head>
+  <body>
+    <div id="main">Loading the elm application...</div>
+
+    <script type="text/javascript" src="/_compile/src/Main.elm"></script>
+    <script type="text/javascript" src="/_compile/src/Native/MeasureText.js"></script>
+    <script type="text/javascript">
+      var node = document.getElementById("main");
+      node.innerHTML = "";
+      var app = Elm.Main.embed(node);
+    </script>
+  </body>
+</html>
