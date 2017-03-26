@@ -1,10 +1,11 @@
 {
     "version": "1.0.0",
     "summary": "An editor for category theory diagrams",
-    "repository": "https://github.com/user/project.git",
+    "repository": "https://github.com/ggazzi/category-diagram-editor.git",
     "license": "MIT",
     "source-directories": [
-        "./src"
+        "./src",
+        "./libs/elm-graph-diagrams/src"
     ],
     "native-modules": true,
     "exposed-modules": [],

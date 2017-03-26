@@ -1,4 +1,4 @@
-var _user$project$Native_MeasureText = function() {
+var _ggazzi$category_diagram_editor$Native_MeasureText = function() {
 
   var canvasContext = document.createElement('canvas').getContext('2d');
 

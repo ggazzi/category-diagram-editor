@@ -1,7 +1,7 @@
-module Demo.View exposing (view)
+module Main.View exposing (view)
 
-import Demo.Model exposing (..)
-import Demo.Update exposing (..)
+import Main.Model exposing (..)
+import Main.Update exposing (..)
 import Diagram exposing (Diagram, Object, ObjectId, Morphism, MorphismId)
 import Diagram.Selection as Selection exposing (Selection)
 import GraphView exposing (Shape(..), Endpoint)
@@ -104,11 +104,8 @@ morphismBeingCreated { interaction, diagram } =
                 Just domain ->
                     [ { id = ( domainId, -1 )
                       , source = objectToEndpoint domain
-                      , target =
-                            { x = mousePos.x
-                            , y = mousePos.y
-                            , shape = NoShape
-                            }
+                      , target = { x = mousePos.x, y = mousePos.y, shape = NoShape }
+                      , controlPoints = []
                       }
                     ]
 
@@ -168,6 +165,7 @@ morphismToEdge ( domain, id, _, codomain ) =
     { id = id
     , source = objectToEndpoint domain
     , target = objectToEndpoint codomain
+    , controlPoints = []
     }
 
 

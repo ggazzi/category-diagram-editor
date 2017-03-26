@@ -1,4 +1,4 @@
-module Demo.Model
+module Main.Model
     exposing
         ( Model
         , InteractionState(..)

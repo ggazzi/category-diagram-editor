@@ -1,8 +1,8 @@
 module Main exposing (..)
 
-import Demo.Model exposing (..)
-import Demo.Update exposing (..)
-import Demo.View exposing (..)
+import Main.Model exposing (..)
+import Main.Update exposing (..)
+import Main.View exposing (..)
 import Diagram exposing (Diagram, Object, Morphism)
 import Diagram.Selection as Selection
 import GraphView exposing (Shape(..), Target(..))

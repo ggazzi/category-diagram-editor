@@ -1,0 +1,3 @@
+[submodule "libs/elm-graph-diagrams"]
+	path = libs/elm-graph-diagrams
+	url = git@github.com:ggazzi/elm-graph-diagrams.git

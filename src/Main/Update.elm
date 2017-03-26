@@ -1,11 +1,11 @@
-module Demo.Update
+module Main.Update
     exposing
         ( Msg(..)
         , update
         , subscriptions
         )
 
-import Demo.Model exposing (..)
+import Main.Model exposing (..)
 import Diagram exposing (Diagram, ObjectId)
 import Diagram.Selection as Selection
 import GraphView exposing (Target(..), Output(..))
@@ -198,9 +198,9 @@ update msg ({ diagram, interaction, selection } as model) =
                         ( newModel, Cmd.none )
 
 
-graphViewConfig : GraphView.UpdateConfig Msg
+graphViewConfig : GraphView.Config Msg
 graphViewConfig =
-    GraphView.updateConfig
+    GraphView.config
         { onMouseUp =
             \target ->
                 case target of
@@ -210,7 +210,7 @@ graphViewConfig =
                     OnNode id ->
                         Just (CreateMorphismTo id)
         , onClick =
-            \{ target, modifiers, position } ->
+            \target position modifiers ->
                 case ( target, Mouse.hasShift modifiers ) of
                     ( OnBackground, False ) ->
                         Just (ClearSelection)
@@ -224,7 +224,7 @@ graphViewConfig =
                     ( OnNode id, True ) ->
                         Just (SelectObject id AddToSelection)
         , onDragStart =
-            \{ target, modifiers, position } ->
+            \target position modifiers ->
                 case ( target, Mouse.hasShift modifiers ) of
                     ( OnNode id, False ) ->
                         Just (StartMovingObjects id)
