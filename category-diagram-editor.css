@@ -1,1 +1,9 @@
 html, head, body { padding:0; margin:0; }
+
+.elm-graph-diagrams__node:hover rect {
+  fill: whitesmoke;
+}
+
+.elm-graph-diagrams__edge:hover path {
+  stroke: grey;
+}
